@@ -3,6 +3,7 @@ package runner
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -812,18 +814,60 @@ func fetchScript(url string) (string, error) {
 	return tmp.Name(), nil
 }
 
+func validateGitURL(repo string) error {
+	// Parse as URL
+	u, err := url.Parse(repo)
+	if err != nil {
+		return fmt.Errorf("invalid git URL: %w", err)
+	}
+
+	// Whitelist schemes
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return fmt.Errorf("unsupported git scheme: %s (use https)", u.Scheme)
+	}
+
+	// Reject local paths
+	if strings.HasPrefix(repo, "/") || strings.HasPrefix(repo, ".") || strings.HasPrefix(repo, "file:") {
+		return fmt.Errorf("local git repositories not allowed")
+	}
+
+	// Reject dangerous characters for command injection
+	dangerous := []string{"|", ";", "&", "$", "`", "\n", "\r", "<", ">"}
+	for _, char := range dangerous {
+		if strings.Contains(repo, char) {
+			return fmt.Errorf("invalid characters in git URL")
+		}
+	}
+
+	return nil
+}
+
 func fetchScriptFromGit(repo, filePath string) (string, error) {
 	if repo == "" || filePath == "" {
 		return "", errors.New("git repo and file path required")
 	}
+
+	// SECURITY: Validate git URL
+	if err := validateGitURL(repo); err != nil {
+		return "", fmt.Errorf("git validation failed: %w", err)
+	}
+
 	dir, err := os.MkdirTemp("", "userscript-git-")
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("git", "clone", "--depth", "1", repo, dir)
+
+	// Use context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", repo, dir)
+	cmd.Env = []string{} // Clear environment
+
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git clone: %v: %s", err, string(out))
 	}
+
 	target := filepath.Join(dir, filePath)
 	data, err := os.ReadFile(target)
 	if err != nil {

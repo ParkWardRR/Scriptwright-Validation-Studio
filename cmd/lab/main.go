@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -110,6 +113,54 @@ func serveCmd(args []string) {
 	log.Fatal(http.ListenAndServe(addr, s.routes()))
 }
 
+// --- auth middleware ---
+
+type authMiddleware struct {
+	apiKey string
+}
+
+func newAuthMiddleware() *authMiddleware {
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		log.Println("WARNING: No API_KEY set, authentication disabled (dev mode only)")
+	}
+	return &authMiddleware{apiKey: apiKey}
+}
+
+func (a *authMiddleware) authenticate(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Skip auth if no key configured (dev mode)
+		if a.apiKey == "" {
+			next(w, r)
+			return
+		}
+
+		// Check Authorization header
+		auth := r.Header.Get("Authorization")
+		if auth == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing Authorization header"})
+			return
+		}
+
+		// Expect "Bearer <key>"
+		const prefix = "Bearer "
+		if !strings.HasPrefix(auth, prefix) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid Authorization format (use: Bearer <key>)"})
+			return
+		}
+
+		token := strings.TrimPrefix(auth, prefix)
+
+		// Constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(token), []byte(a.apiKey)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid API key"})
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 // --- server ---
 
 type server struct {
@@ -121,11 +172,13 @@ func newServer(workspace string) *server {
 }
 
 func (s *server) routes() http.Handler {
+	auth := newAuthMiddleware()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.health)
-	mux.HandleFunc("/v1/runs", s.handleRuns)
-	mux.HandleFunc("/v1/runs/", s.handleRunByID)
-	mux.HandleFunc("/v1/extensions", s.handleExtensions)
+	mux.HandleFunc("/v1/runs", auth.authenticate(s.handleRuns))
+	mux.HandleFunc("/v1/runs/", s.handleRunByID) // Read-only, no auth required
+	mux.HandleFunc("/v1/extensions", auth.authenticate(s.handleExtensions))
 	// static files for artifacts
 	runsDir := filepath.Join(s.workspace, "runs")
 	mux.Handle("/runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(runsDir))))
@@ -240,6 +293,29 @@ func (s *server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown path"})
 }
 
+func sanitizeFilename(filename string) (string, error) {
+	// Strip directory components
+	base := filepath.Base(filename)
+
+	// Reject suspicious patterns
+	if strings.Contains(base, "..") || strings.HasPrefix(base, ".") {
+		return "", fmt.Errorf("invalid filename: %s", filename)
+	}
+
+	// Validate extension
+	ext := filepath.Ext(base)
+	allowedExts := map[string]bool{".crx": true, ".xpi": true, ".zip": true}
+	if !allowedExts[ext] {
+		return "", fmt.Errorf("invalid extension: %s (allowed: .crx, .xpi, .zip)", ext)
+	}
+
+	// Generate safe name: hash + original extension
+	hash := sha256.Sum256([]byte(base + time.Now().String()))
+	safeName := hex.EncodeToString(hash[:8]) + ext
+
+	return safeName, nil
+}
+
 func (s *server) handleExtensions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST only"})
@@ -255,15 +331,31 @@ func (s *server) handleExtensions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	name := header.Filename
-	if name == "" {
-		name = fmt.Sprintf("ext-%d", time.Now().Unix())
+
+	// Sanitize filename - SECURITY FIX
+	safeName, err := sanitizeFilename(header.Filename)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
-	dest := filepath.Join("extensions", name)
-	if err := os.MkdirAll("extensions", 0o755); err != nil {
+
+	// Use absolute path
+	extDir := filepath.Join(s.workspace, "extensions")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	dest := filepath.Join(extDir, safeName)
+
+	// Validate destination is within extensions directory
+	absExt, _ := filepath.Abs(extDir)
+	absDest, _ := filepath.Abs(dest)
+	if !strings.HasPrefix(absDest, absExt) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
+		return
+	}
+
 	out, err := os.Create(dest)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -274,7 +366,8 @@ func (s *server) handleExtensions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"path": dest})
+	log.Printf("Extension uploaded: %s (original: %s)", safeName, header.Filename)
+	writeJSON(w, http.StatusOK, map[string]string{"path": dest, "filename": safeName})
 }
 
 func normalizeManifestPaths(res runner.Result) runner.Manifest {
