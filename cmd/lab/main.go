@@ -129,6 +129,14 @@ func (s *server) routes() http.Handler {
 	// static files for artifacts
 	runsDir := filepath.Join(s.workspace, "runs")
 	mux.Handle("/runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(runsDir))))
+
+	// serve web UI
+	uiDir := filepath.Join(s.workspace, "webui")
+	mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir(uiDir))))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ui/", http.StatusFound)
+	})
+
 	return withCORS(mux)
 }
 

@@ -1,0 +1,23 @@
+[Unit]
+Description=Userscript Validation Lab API Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alfa
+Group=alfa
+WorkingDirectory=/home/alfa
+ExecStartPre=-/usr/bin/podman stop userscript-lab
+ExecStartPre=-/usr/bin/podman rm userscript-lab
+ExecStart=/usr/bin/podman run --rm --name userscript-lab \
+  -p 8787:8787 \
+  -v /home/alfa/runs:/app/runs \
+  -v /home/alfa/extensions:/app/extensions \
+  userscript-lab:latest
+ExecStop=/usr/bin/podman stop userscript-lab
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
