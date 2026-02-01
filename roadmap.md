@@ -3,7 +3,7 @@
 ## Milestones (checklist)
 - [ ] M0 — Spike (goal: extension + userscript automation feasibility)  
   - [x] Demo run produced with Playwright persistent context and userscript execution (init-script injection) plus artifacts (PNG, WebP, manifest).  
-  - [~] MV3 extension load + deterministic TM/VM install path (API supports `--ext` dir; drop unpacked builds into `extensions/` and validate).
+  - [~] MV3 extension load + deterministic TM/VM install path (API supports `--ext` dir; extensions/ placeholders exist; need bundled TM MV3 + VM/Firefox and automated install flow).
 - [ ] M1 — MVP runner (deterministic runs + artifacts)  
   - [x] `lab run` CLI with persistent profile mgmt.  
   - [~] Script ingestion (file path supported; paste/git to follow).  
@@ -12,8 +12,8 @@
   - [x] Prototype web UI shell with settings, embedded browser pane, console stream, and artifact preview.  
   - [x] Wire UI to runner API for live runs and artifact retrieval (falls back to simulation when API offline).
 - [ ] M3 — “Testing to the max” (full checklist categories)  
-  - [~] Visual regression + network assertions + HAR record/replay toggles (hash-based baseline, diff image, blocked-host/status checks, HAR capture & replay).  
-  - [~] Flow editor (step list) driving Playwright (UI sends steps; runner executes basic click/fill/wait/assert-text).
+  - [~] Visual regression + network assertions + HAR record/replay toggles (hash-based baseline, diff image, blocked-host/status checks, HAR capture & replay). Need pixel-threshold tuning UI + diff preview surface.  
+  - [~] Flow editor (step list) driving Playwright (UI sends steps; runner executes basic click/fill/wait/assert-text). Extend assertions schema next.
 - [ ] M4 — Hardening (reduce flake + better debugging)  
   - [ ] Trace-first workflow; retry policy; selector diagnostics; redaction; export bundles.
 - [ ] M5 — CI & sharing (team-scale)  
