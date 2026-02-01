@@ -669,7 +669,12 @@ func installTampermonkey(ctx playwright.BrowserContext, scriptPath string, logge
 		logger.warn("tm", "new page failed", map[string]any{"error": err.Error()})
 		return false
 	}
-	localURL := "chrome-extension://ddddjjjklioejkhhafmeepjlcenalaol/userscript.html"
+	extID := "dhdgffkkebhmkfjojejmpbldmpobfkfo" // known TM MV3 id
+	if detected := detectExtensionID(ctx); detected != "" {
+		extID = detected
+		logger.info("tm", "using detected extension id", map[string]any{"id": extID})
+	}
+	localURL := fmt.Sprintf("chrome-extension://%s/userscript.html", extID)
 	if _, err := page.Goto(localURL, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateNetworkidle}); err != nil {
 		logger.warn("tm", "open userscript.html failed", map[string]any{"error": err.Error()})
 		return false
@@ -682,6 +687,9 @@ func installTampermonkey(ctx playwright.BrowserContext, scriptPath string, logge
 	if err := input.SetInputFiles([]string{scriptPath}); err != nil {
 		logger.warn("tm", "set file failed", map[string]any{"error": err.Error()})
 		return false
+	}
+	if installBtn, _ := page.QuerySelector("button, input[type=submit]"); installBtn != nil {
+		_ = installBtn.Click()
 	}
 	page.WaitForTimeout(1200)
 	logger.info("tm", "script dropped into TM import", nil)
