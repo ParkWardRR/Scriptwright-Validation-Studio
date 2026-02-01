@@ -51,6 +51,7 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - Visual diff: `--baseline <dir>` seeds/compares and emits `visual-diff.png`; adjust threshold via `--visual_threshold` (0–255). Manifests include pixel counts/ratio.
 - Notarized CLI: `dist/lab-macos.zip` (built & notarized locally via notarytool with Developer ID + hardened runtime).
 - Extensions: UI upload supports CRX/XPI; or download manually (TM MV3 CRX link; VM from https://violentmonkey.github.io/get-it/) and unzip to `extensions/`, then run with `--ext extensions/tampermonkey-mv3` or load VM in Firefox profile.
+- Apple container quickstart: see `apple-container.md` for podman + apple/container steps (build, mount extensions, run API, open local UI).
 
 ## Web UI prototype (manual + future automated)
 <p align="center">
