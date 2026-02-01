@@ -20,7 +20,12 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 ## CLI runner (`lab`)
 - One-off run:  
   ```bash
-  go run ./cmd/lab run --url https://en.wikipedia.org/wiki/Tampermonkey --script scripts/wikipedia-dark.user.js --engine "Tampermonkey (init-script)"
+  go run ./cmd/lab run \\
+    --url https://en.wikipedia.org/wiki/Tampermonkey \\
+    --script scripts/wikipedia-dark.user.js \\
+    --engine "Tampermonkey (init-script)" \\
+    --ext /path/to/tampermonkey-mv3 \\        # optional MV3 load
+    --headless=true
   ```  
   Outputs manifest JSON and writes artifacts under `runs/<id>/`.
 - Serve API for the web UI:  
@@ -29,6 +34,9 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
   ```  
   Endpoints: `POST /v1/runs` (start run), `GET /v1/runs/{id}`, `GET /v1/runs/{id}/logs`, static artifacts under `/runs/…`.
 - MV3 extension loading: pass `--ext /path/to/extension` (or env `USERSCRIPT_ENGINE_EXT_DIR`) to use `--load-extension/--disable-extensions-except`. Falls back to init-script injection when unset.
+- Visual regression starter: set `BASELINE_DIR` (or `Options.BaselineDir`) and the runner will create a baseline hash on first run and warn when the screenshot hash changes.
+- Network assertion starter: provide `BlockedHosts` (env `BLOCKED_HOSTS=host1,host2` planned) to surface blocked domains and 4xx/5xx responses in the manifest’s `network_issues`.
+- HAR toggle: `--har` writes `network.har` in the run artifacts for later replay/inspection.
 
 ## Web UI prototype (manual + future automated)
 <p align="center">

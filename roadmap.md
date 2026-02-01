@@ -12,7 +12,7 @@
   - [x] Prototype web UI shell with settings, embedded browser pane, console stream, and artifact preview.  
   - [x] Wire UI to runner API for live runs and artifact retrieval (falls back to simulation when API offline).
 - [ ] M3 — “Testing to the max” (full checklist categories)  
-  - [ ] Visual regression + network assertions + HAR record/replay toggle.  
+  - [~] Visual regression + network assertions + HAR record toggle (hash-based baseline + blocked-host/status checks + HAR capture stub).  
   - [ ] Flow editor (step list) driving Playwright.
 - [ ] M4 — Hardening (reduce flake + better debugging)  
   - [ ] Trace-first workflow; retry policy; selector diagnostics; redaction; export bundles.

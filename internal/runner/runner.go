@@ -2,6 +2,7 @@ package runner
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,9 @@ type Options struct {
 	ProfileDir   string // optional persistent profile location
 	CaptureTrace bool
 	CaptureHAR   bool
-	Workspace    string // base path; defaults to cwd
+	BaselineDir  string   // for visual regression hashes
+	BlockedHosts []string // basic network assertion
+	Workspace    string   // base path; defaults to cwd
 }
 
 // Result contains artifact paths and manifest.
@@ -60,6 +63,9 @@ type Manifest struct {
 	Engine        string          `json:"engine"`
 	ExtensionDir  string          `json:"extension_dir,omitempty"`
 	LogPath       string          `json:"log_path"`
+	VisualHash    string          `json:"visual_hash,omitempty"`
+	VisualDiff    bool            `json:"visual_diff,omitempty"`
+	NetworkIssues []string        `json:"network_issues,omitempty"`
 }
 
 // Run executes a single userscript against a URL and produces artifacts.
@@ -135,12 +141,22 @@ func Run(opts Options) (Result, error) {
 		)
 		logger.info("runner", "attempting MV3 extension load", map[string]any{"extension_dir": opts.ExtensionDir})
 	}
+	if opts.CaptureHAR {
+		harPath := filepath.Join(artifactsDir, "network.har")
+		ctxOpts.RecordHarPath = playwright.String(harPath)
+		ctxOpts.RecordHarURLFilter = "*"
+	}
 
 	ctx, err := pw.Chromium.LaunchPersistentContext(profileDir, ctxOpts)
 	if err != nil {
 		return Result{}, fmt.Errorf("launch context: %w", err)
 	}
 	defer ctx.Close()
+
+	var responses []playwright.Response
+	ctx.OnResponse(func(resp playwright.Response) {
+		responses = append(responses, resp)
+	})
 
 	page, err := ctx.NewPage()
 	if err != nil {
@@ -187,6 +203,8 @@ func Run(opts Options) (Result, error) {
 		logger.warn("artifact", "screenshot failed", map[string]any{"error": err.Error()})
 	}
 
+	visualHash, visualDiff := computeVisualHash(screenshotPath, opts, logger)
+
 	video := page.Video()
 	if err := page.Close(); err != nil {
 		logger.warn("runner", "close page", map[string]any{"error": err.Error()})
@@ -227,15 +245,18 @@ func Run(opts Options) (Result, error) {
 		FinishedAt:    time.Now(),
 		TargetURL:     opts.TargetURL,
 		Screenshot:    filepath.Base(screenshotPath),
+		VisualHash:    visualHash,
+		VisualDiff:    visualDiff,
 		VideoWebM:     filepath.Base(videoPath),
 		VideoWebP:     filepath.Base(webpPath),
 		TraceZip:      "",
-		HAR:           "",
+		HAR:           harNameIfExists(artifactsDir),
 		ScriptMeta:    scriptMeta,
 		ProfileFolder: profileDir,
 		Engine:        opts.Engine,
 		ExtensionDir:  opts.ExtensionDir,
 		LogPath:       logPath,
+		NetworkIssues: summarizeNetwork(responses, opts.BlockedHosts, logger),
 	}
 
 	manifestPath := filepath.Join(runDir, "run.json")
@@ -388,4 +409,69 @@ func GuessWorkspace() string {
 func DiscoverExtensionDir() string {
 	ext := os.Getenv("USERSCRIPT_ENGINE_EXT_DIR")
 	return strings.TrimSpace(ext)
+}
+
+// computeVisualHash creates a SHA256 of the screenshot and compares to any baseline.
+func computeVisualHash(screenshotPath string, opts Options, logger *ndjsonLogger) (hash string, diff bool) {
+	data, err := os.ReadFile(screenshotPath)
+	if err != nil || len(data) == 0 {
+		return "", false
+	}
+	sum := fmt.Sprintf("%x", sha256.Sum256(data))
+	hash = sum
+	if opts.BaselineDir == "" {
+		return hash, false
+	}
+	if err := os.MkdirAll(opts.BaselineDir, 0o755); err != nil {
+		logger.warn("visual", "baseline dir create failed", map[string]any{"error": err.Error()})
+		return hash, false
+	}
+	basePath := filepath.Join(opts.BaselineDir, "screenshot.png")
+	if _, err := os.Stat(basePath); err != nil {
+		_ = os.WriteFile(basePath, data, 0o644)
+		logger.info("visual", "baseline created", map[string]any{"path": basePath})
+		return hash, false
+	}
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		logger.warn("visual", "baseline read failed", map[string]any{"error": err.Error()})
+		return hash, false
+	}
+	baseHash := fmt.Sprintf("%x", sha256.Sum256(baseData))
+	if baseHash != hash {
+		logger.warn("visual", "screenshot hash mismatch vs baseline", map[string]any{"baseline": baseHash, "current": hash})
+		return hash, true
+	}
+	logger.info("visual", "screenshot matches baseline", nil)
+	return hash, false
+}
+
+func harNameIfExists(artifactsDir string) string {
+	har := filepath.Join(artifactsDir, "network.har")
+	if _, err := os.Stat(har); err == nil {
+		return filepath.Base(har)
+	}
+	return ""
+}
+
+func summarizeNetwork(responses []playwright.Response, blocked []string, logger *ndjsonLogger) []string {
+	var issues []string
+	for _, r := range responses {
+		status := r.Status()
+		url := r.URL()
+		if status >= 400 {
+			msg := fmt.Sprintf("status %d for %s", status, url)
+			issues = append(issues, msg)
+		}
+		for _, host := range blocked {
+			if strings.Contains(url, host) {
+				msg := fmt.Sprintf("blocked host seen: %s", url)
+				issues = append(issues, msg)
+			}
+		}
+	}
+	if len(issues) > 0 {
+		logger.warn("network", "issues detected", map[string]any{"count": len(issues)})
+	}
+	return issues
 }
