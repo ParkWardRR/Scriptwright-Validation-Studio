@@ -1,6 +1,6 @@
 # Scriptwright Validation Studio — Userscript Test Lab
 
-![Status](https://img.shields.io/badge/status-alpha%20v0.6.0-green) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-flow%20editor%20live-ff69b4) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen)
+![Status](https://img.shields.io/badge/status-alpha%20v0.6.0-green) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-flow%20editor%20live-ff69b4) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen) ![Notarized](https://img.shields.io/badge/macOS-notarized-blue)
 
 <p align="center">
   <img src="artifacts/wikipedia-dark.webp" alt="Animated walkthrough of Wikipedia Dark/Light Mode userscript being validated" width="100%">
@@ -46,6 +46,7 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - Flow steps: pass `--steps '[{"action":"click","target":"text=Toggle Dark Mode"}]'` (or build steps in the web UI) to drive Playwright actions; includes `wait`, `waitForSelector`, `fill`, `assert-text`.
 - Script ingestion: file path, paste/stdin, URL (`--script_url`) or git repo/path (`--script_git_repo`, `--script_git_path`).
 - Visual diff: `--baseline <dir>` seeds/compares and emits `visual-diff.png`; adjust threshold via `--visual_threshold` (0–255). Manifests include pixel counts/ratio.
+- Notarized CLI: `dist/lab-macos.zip` (built & notarized locally via notarytool with Developer ID + hardened runtime).
 
 ## Web UI prototype (manual + future automated)
 <p align="center">
