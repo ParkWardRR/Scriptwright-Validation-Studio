@@ -1,6 +1,6 @@
 # Scriptwright Validation Studio — Userscript Test Lab
 
-![Status](https://img.shields.io/badge/status-alpha%20v0.6.0-green) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-flow%20editor%20live-ff69b4) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen) ![Notarized](https://img.shields.io/badge/macOS-notarized-blue)
+![Status](https://img.shields.io/badge/status-alpha%20v0.6.0-green) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-flow%20editor%20live-ff69b4) ![Artifacts](https://img.shields.io/badge/HAR%2FTrace-ready-blueviolet) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen) ![Notarized](https://img.shields.io/badge/macOS-notarized-blue)
 
 <p align="center">
   <img src="artifacts/wikipedia-dark.webp" alt="Animated walkthrough of Wikipedia Dark/Light Mode userscript being validated" width="100%">
@@ -16,13 +16,16 @@
 ## Why this exists
 A desktop-first lab for validating real userscripts with real engines (Tampermonkey/Violentmonkey) using Playwright-Go. It mirrors the spec/roadmap in `spec.md` and `roadmap.md`: persistent Chromium context, bundled extensions, rich artifacts (logs, HAR, traces, screenshots, video), and a pro debugging console.
 
-## Demo recipe (15–20s)
-1) Install native deps: `brew install ffmpeg webp`  
-2) Run the sample flow: `go run ./cmd/demo`  
-3) Open the generated assets in `artifacts/`:
-   - `wikipedia-dark.webp` — animated walkthrough (wow factor starter for the README)
-   - `wikipedia-dark.png` — full-page screenshot post-toggle  
-   - `run.json` — manifest with parsed userscript metadata and run timings
+## Mac-first quickstart (Linux friendly)
+1) Install deps: `brew install ffmpeg webp podman` (or use Docker).  
+2) Build + run container (serves API + UI):  
+   ```bash
+   podman build -f Containerfile -t userscript-lab .
+   podman run --rm -p 8787:8787 -v $(pwd)/runs:/app/runs userscript-lab
+   ```
+3) Open UI: `open http://localhost:8787/ui/` (or serve `webui/` locally).  
+4) Add an extension: grab TM MV3 CRX or VM XPI (links in Extensions panel), upload it, then **Run via API**.  
+5) Artifacts land in `/runs/<id>/artifacts/` (HAR/trace/screenshot/WebP/diff when enabled).
 
 ## CLI runner (`lab`)
 - One-off run:  
