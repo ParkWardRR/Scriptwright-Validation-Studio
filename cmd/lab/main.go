@@ -47,6 +47,7 @@ func runCmd(args []string) {
 	har := fs.Bool("har", false, "Capture HAR (stub)")
 	replayHar := fs.String("replay-har", "", "Replay from HAR file")
 	baseline := fs.String("baseline", os.Getenv("BASELINE_DIR"), "Baseline dir for visual diff")
+	stepsJSON := fs.String("steps", "", "JSON array of steps [{\"action\":\"click\",\"target\":\"text=...\"}]")
 	fs.Parse(args)
 
 	var blocked []string
@@ -55,6 +56,12 @@ func runCmd(args []string) {
 			if trimmed := strings.TrimSpace(h); trimmed != "" {
 				blocked = append(blocked, trimmed)
 			}
+		}
+	}
+	var steps []runner.Step
+	if strings.TrimSpace(*stepsJSON) != "" {
+		if err := json.Unmarshal([]byte(*stepsJSON), &steps); err != nil {
+			log.Fatalf("invalid steps JSON: %v", err)
 		}
 	}
 
@@ -69,6 +76,7 @@ func runCmd(args []string) {
 		ReplayHAR:    strings.TrimSpace(*replayHar),
 		BaselineDir:  strings.TrimSpace(*baseline),
 		BlockedHosts: blocked,
+		Steps:        steps,
 		Workspace:    ".",
 	}
 	res, err := runner.Run(opts)
@@ -126,11 +134,15 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 type runRequest struct {
-	URL          string `json:"url"`
-	Script       string `json:"script"`
-	Engine       string `json:"engine"`
-	ExtensionDir string `json:"extension_dir"`
-	Headless     *bool  `json:"headless"`
+	URL          string        `json:"url"`
+	Script       string        `json:"script"`
+	Engine       string        `json:"engine"`
+	ExtensionDir string        `json:"extension_dir"`
+	Headless     *bool         `json:"headless"`
+	HAR          bool          `json:"har"`
+	ReplayHAR    string        `json:"replay_har"`
+	Baseline     string        `json:"baseline"`
+	Steps        []runner.Step `json:"steps"`
 }
 
 func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
@@ -143,12 +155,25 @@ func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	var blocked []string
+	if env := os.Getenv("BLOCKED_HOSTS"); env != "" {
+		for _, h := range strings.Split(env, ",") {
+			if trimmed := strings.TrimSpace(h); trimmed != "" {
+				blocked = append(blocked, trimmed)
+			}
+		}
+	}
 	opts := runner.Options{
 		TargetURL:    req.URL,
 		ScriptPath:   req.Script,
 		Engine:       req.Engine,
 		ExtensionDir: strings.TrimSpace(req.ExtensionDir),
 		Headless:     true,
+		CaptureHAR:   req.HAR,
+		ReplayHAR:    strings.TrimSpace(req.ReplayHAR),
+		BaselineDir:  strings.TrimSpace(req.Baseline),
+		BlockedHosts: blocked,
+		Steps:        req.Steps,
 		Workspace:    s.workspace,
 	}
 	if req.Headless != nil {
@@ -160,14 +185,7 @@ func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	manifest := res.Manifest
-	manifest.Screenshot = "/runs/" + res.RunID + "/artifacts/" + manifest.Screenshot
-	if manifest.VideoWebP != "" {
-		manifest.VideoWebP = "/runs/" + res.RunID + "/artifacts/" + manifest.VideoWebP
-	}
-	if manifest.VideoWebM != "" {
-		manifest.VideoWebM = "/runs/" + res.RunID + "/artifacts/" + manifest.VideoWebM
-	}
+	manifest := normalizeManifestPaths(res)
 	writeJSON(w, http.StatusOK, manifest)
 }
 
@@ -189,14 +207,7 @@ func (s *server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		manifest.Screenshot = "/runs/" + runID + "/artifacts/" + manifest.Screenshot
-		if manifest.VideoWebP != "" {
-			manifest.VideoWebP = "/runs/" + runID + "/artifacts/" + manifest.VideoWebP
-		}
-		if manifest.VideoWebM != "" {
-			manifest.VideoWebM = "/runs/" + runID + "/artifacts/" + manifest.VideoWebM
-		}
-		writeJSON(w, http.StatusOK, manifest)
+		writeJSON(w, http.StatusOK, normalizeManifestPaths(runner.Result{RunID: runID, Manifest: manifest}))
 		return
 	}
 
@@ -207,6 +218,30 @@ func (s *server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown path"})
+}
+
+func normalizeManifestPaths(res runner.Result) runner.Manifest {
+	m := res.Manifest
+	prefix := "/runs/" + res.RunID + "/artifacts/"
+	if m.Screenshot != "" && !strings.HasPrefix(m.Screenshot, "/runs/") {
+		m.Screenshot = prefix + m.Screenshot
+	}
+	if m.VideoWebP != "" && !strings.HasPrefix(m.VideoWebP, "/runs/") {
+		m.VideoWebP = prefix + m.VideoWebP
+	}
+	if m.VideoWebM != "" && !strings.HasPrefix(m.VideoWebM, "/runs/") {
+		m.VideoWebM = prefix + m.VideoWebM
+	}
+	if m.HAR != "" && !strings.HasPrefix(m.HAR, "/runs/") {
+		m.HAR = prefix + m.HAR
+	}
+	if m.TraceZip != "" && !strings.HasPrefix(m.TraceZip, "/runs/") {
+		m.TraceZip = prefix + m.TraceZip
+	}
+	if m.VisualDiffImg != "" && !strings.HasPrefix(m.VisualDiffImg, "/runs/") {
+		m.VisualDiffImg = prefix + m.VisualDiffImg
+	}
+	return m
 }
 
 func withCORS(next http.Handler) http.Handler {

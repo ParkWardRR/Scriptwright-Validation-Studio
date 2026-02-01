@@ -10,6 +10,8 @@
   const screenshot = document.getElementById('screenshot');
   const webp = document.getElementById('webp');
   const backendStatus = document.getElementById('backend-status');
+  const harLink = document.getElementById('har-link');
+  const traceLink = document.getElementById('trace-link');
 
   const metaName = document.getElementById('meta-name');
   const metaMatch = document.getElementById('meta-match');
@@ -58,12 +60,22 @@
       return;
     }
     appendLog('runner', 'Starting run via API…');
+    let steps = [];
+    try {
+      steps = JSON.parse(flowJsonEl.textContent || '[]');
+    } catch {
+      steps = [];
+    }
     const payload = {
       url: urlInput.value.trim(),
       script: document.getElementById('script-path').value.trim(),
       engine: engineInput.value,
       extension_dir: '',
       headless: document.getElementById('headless').value === 'true',
+      har: captureHar.checked,
+      replay_har: document.getElementById('replay-har').value.trim(),
+      baseline: '',
+      steps,
     };
     try {
       const res = await fetch(`${apiBase}/v1/runs`, {
@@ -103,6 +115,16 @@
     metaProfile.textContent = manifest.profile_folder || manifest.ProfileFolder || 'temp profile';
     if (manifest.screenshot) screenshot.src = manifest.screenshot;
     if (manifest.video_webp) webp.src = manifest.video_webp;
+    if (manifest.har) {
+      harLink.textContent = manifest.har;
+      harLink.href = manifest.har;
+      appendLog('artifact', `HAR: ${manifest.har}`);
+    }
+    if (manifest.trace_zip) {
+      traceLink.textContent = manifest.trace_zip;
+      traceLink.href = manifest.trace_zip;
+      appendLog('artifact', `Trace: ${manifest.trace_zip}`);
+    }
   }
 
   document.getElementById('start-run').addEventListener('click', startRun);

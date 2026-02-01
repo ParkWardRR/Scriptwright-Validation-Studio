@@ -52,6 +52,9 @@
       <label class="row">
         <input type="checkbox" id="capture-har" /> HAR
       </label>
+      <label>Replay HAR (path)
+        <input id="replay-har" type="text" placeholder="runs/<id>/artifacts/network.har" />
+      </label>
       <div class="actions">
         <button id="launch" class="ghost">Open Browser Pane</button>
         <button id="load-artifacts" class="ghost">Load Sample Artifacts</button>
@@ -76,6 +79,14 @@
         <div>
           <p class="label">WebP run video</p>
           <img id="webp" src="../artifacts/wikipedia-dark.webp" alt="Animated WebP" />
+        </div>
+        <div>
+          <p class="label">HAR</p>
+          <a id="har-link" href="#" target="_blank" rel="noreferrer">—</a>
+        </div>
+        <div>
+          <p class="label">Trace</p>
+          <a id="trace-link" href="#" target="_blank" rel="noreferrer">—</a>
         </div>
       </div>
     </section>

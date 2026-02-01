@@ -105,6 +105,7 @@ button.ghost { background: transparent; border-color: var(--border); }
 
 .artifact-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .artifact-preview img { width: 100%; border-radius: 10px; border: 1px solid var(--border); background: #0b0d18; }
+.artifact-preview a { color: var(--accent); text-decoration: none; font-weight: 600; }
 .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 
 .console-stream {

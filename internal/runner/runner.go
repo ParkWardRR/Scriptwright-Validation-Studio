@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +35,16 @@ type Options struct {
 	ReplayHAR    string   // optional path to HAR for replay
 	BaselineDir  string   // for visual regression hashes
 	BlockedHosts []string // basic network assertion
+	Steps        []Step   // flow actions/assertions
 	Workspace    string   // base path; defaults to cwd
+}
+
+// Step represents a simple flow action or assertion.
+type Step struct {
+	Action string `json:"action"`
+	Target string `json:"target,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Assert string `json:"assert,omitempty"` // e.g., "text-equals"
 }
 
 // Result contains artifact paths and manifest.
@@ -160,6 +170,14 @@ func Run(opts Options) (Result, error) {
 	}
 	defer ctx.Close()
 
+	if opts.ExtensionDir != "" {
+		if extID := detectExtensionID(ctx); extID != "" {
+			logger.info("extension", "detected extension id", map[string]any{"id": extID})
+		} else {
+			logger.warn("extension", "could not detect extension id from service workers", nil)
+		}
+	}
+
 	if opts.ReplayHAR != "" {
 		if err := ctx.RouteFromHAR(opts.ReplayHAR); err != nil {
 			logger.warn("har", "route from HAR failed", map[string]any{"error": err.Error()})
@@ -192,20 +210,22 @@ func Run(opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("navigate: %w", err)
 	}
 
-	// Minimal DOM assertion to satisfy M1 goals.
-	if _, err := page.WaitForSelector("text=Toggle Dark Mode", playwright.PageWaitForSelectorOptions{
-		Timeout: playwright.Float(8_000),
-	}); err != nil {
-		logger.warn("assert", "toggle button not found", map[string]any{"error": err.Error()})
+	// Execute flow steps or default toggle.
+	if len(opts.Steps) > 0 {
+		executeSteps(page, opts.Steps, logger)
 	} else {
-		logger.info("assert", "toggle button present", nil)
-	}
-
-	// Toggle to show behavior difference.
-	if err := page.Click("text=Toggle Dark Mode"); err != nil {
-		logger.warn("action", "click toggle failed", map[string]any{"error": err.Error()})
-	} else {
-		logger.info("action", "toggled dark mode", nil)
+		if _, err := page.WaitForSelector("text=Toggle Dark Mode", playwright.PageWaitForSelectorOptions{
+			Timeout: playwright.Float(8_000),
+		}); err != nil {
+			logger.warn("assert", "toggle button not found", map[string]any{"error": err.Error()})
+		} else {
+			logger.info("assert", "toggle button present", nil)
+		}
+		if err := page.Click("text=Toggle Dark Mode"); err != nil {
+			logger.warn("action", "click toggle failed", map[string]any{"error": err.Error()})
+		} else {
+			logger.info("action", "toggled dark mode", nil)
+		}
 	}
 
 	page.WaitForTimeout(1200)
@@ -226,7 +246,17 @@ func Run(opts Options) (Result, error) {
 	}
 
 	if opts.CaptureTrace {
-		// TODO: integrate playwright tracing when stabilizing
+		tracePath := filepath.Join(artifactsDir, "trace.zip")
+		if err := ctx.Tracing().Start(playwright.TracingStartOptions{Screenshots: playwright.Bool(true), Snapshots: playwright.Bool(true), Sources: playwright.Bool(true)}); err != nil {
+			logger.warn("trace", "start failed", map[string]any{"error": err.Error()})
+		}
+		defer func() {
+			if err := ctx.Tracing().StopChunk(tracePath); err != nil {
+				logger.warn("trace", "stop failed", map[string]any{"error": err.Error()})
+			} else {
+				logger.info("trace", "trace captured", map[string]any{"path": tracePath})
+			}
+		}()
 	}
 
 	if opts.CaptureHAR {
@@ -265,7 +295,7 @@ func Run(opts Options) (Result, error) {
 		VisualDiffImg: visualDiffImg,
 		VideoWebM:     filepath.Base(videoPath),
 		VideoWebP:     filepath.Base(webpPath),
-		TraceZip:      "",
+		TraceZip:      traceNameIfExists(artifactsDir),
 		HAR:           harNameIfExists(artifactsDir),
 		ReplayHAR:     opts.ReplayHAR,
 		ScriptMeta:    scriptMeta,
@@ -472,6 +502,14 @@ func harNameIfExists(artifactsDir string) string {
 	return ""
 }
 
+func traceNameIfExists(artifactsDir string) string {
+	trace := filepath.Join(artifactsDir, "trace.zip")
+	if _, err := os.Stat(trace); err == nil {
+		return filepath.Base(trace)
+	}
+	return ""
+}
+
 func summarizeNetwork(responses []playwright.Response, blocked []string, logger *ndjsonLogger) []string {
 	var issues []string
 	for _, r := range responses {
@@ -492,6 +530,73 @@ func summarizeNetwork(responses []playwright.Response, blocked []string, logger 
 		logger.warn("network", "issues detected", map[string]any{"count": len(issues)})
 	}
 	return issues
+}
+
+func detectExtensionID(ctx playwright.BrowserContext) string {
+	for _, sw := range ctx.ServiceWorkers() {
+		url := sw.URL()
+		parts := strings.Split(url, "/")
+		for i, p := range parts {
+			if p == "chrome-extension:" && i+1 < len(parts) {
+				return parts[i+1]
+			}
+		}
+		if strings.HasPrefix(url, "chrome-extension://") {
+			tokens := strings.Split(strings.TrimPrefix(url, "chrome-extension://"), "/")
+			if len(tokens) > 0 {
+				return tokens[0]
+			}
+		}
+	}
+	return ""
+}
+
+// executeSteps runs a minimal action/assertion DSL against the page.
+func executeSteps(page playwright.Page, steps []Step, logger *ndjsonLogger) {
+	for i, step := range steps {
+		scope := fmt.Sprintf("step-%d", i+1)
+		switch strings.ToLower(step.Action) {
+		case "click":
+			if err := page.Click(step.Target); err != nil {
+				logger.warn(scope, "click failed", map[string]any{"error": err.Error(), "target": step.Target})
+			} else {
+				logger.info(scope, "click ok", map[string]any{"target": step.Target})
+			}
+		case "fill":
+			if err := page.Fill(step.Target, step.Value); err != nil {
+				logger.warn(scope, "fill failed", map[string]any{"error": err.Error(), "target": step.Target})
+			} else {
+				logger.info(scope, "fill ok", map[string]any{"target": step.Target})
+			}
+		case "waitforselector":
+			if _, err := page.WaitForSelector(step.Target, playwright.PageWaitForSelectorOptions{Timeout: playwright.Float(8000)}); err != nil {
+				logger.warn(scope, "waitForSelector failed", map[string]any{"error": err.Error(), "target": step.Target})
+			} else {
+				logger.info(scope, "selector present", map[string]any{"target": step.Target})
+			}
+		case "wait":
+			d := 500.0
+			if v, err := strconv.ParseFloat(step.Value, 64); err == nil && v > 0 {
+				d = v
+			}
+			page.WaitForTimeout(d)
+			logger.info(scope, "waited", map[string]any{"ms": d})
+		case "assert-text":
+			text, err := page.TextContent(step.Target)
+			if err != nil {
+				logger.warn(scope, "assert-text failed", map[string]any{"error": err.Error(), "target": step.Target})
+				continue
+			}
+			got := strings.TrimSpace(text)
+			if got != step.Value {
+				logger.warn(scope, "assert-text mismatch", map[string]any{"target": step.Target, "expected": step.Value, "got": got})
+			} else {
+				logger.info(scope, "assert-text ok", map[string]any{"target": step.Target, "value": got})
+			}
+		default:
+			logger.warn(scope, "unknown action", map[string]any{"action": step.Action})
+		}
+	}
 }
 
 // computeDiffImage generates a simple diff heatmap (red overlay) when sizes match.

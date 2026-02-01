@@ -38,6 +38,8 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - Network assertion starter: provide `BlockedHosts` (env `BLOCKED_HOSTS=host1,host2` planned) to surface blocked domains and 4xx/5xx responses in the manifest’s `network_issues`.
 - HAR: `--har` writes `network.har` for inspection; `--replay-har /path/to.har` routes traffic from an existing HAR for deterministic offline runs (best-effort).
 - Extension bundles: drop unpacked builds into `extensions/` (e.g., `extensions/tampermonkey-mv3`, `extensions/violentmonkey-firefox`) and point `--ext` or `USERSCRIPT_ENGINE_EXT_DIR` there for deterministic loading.
+- Trace: `--trace` captures `trace.zip` (screenshots + snapshots) alongside artifacts.
+- Flow steps: pass `--steps '[{"action":"click","target":"text=Toggle Dark Mode"}]'` (or build steps in the web UI) to drive Playwright actions; includes basic `wait`, `waitForSelector`, `fill`, and `assert-text`.
 
 ## Web UI prototype (manual + future automated)
 <p align="center">
@@ -49,7 +51,8 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
   - (Optional) start the API: `go run ./cmd/lab serve --port 8787`. The UI will auto-detect it and use **Run via API**; otherwise it falls back to simulation.  
   - Click **Load Sample Artifacts** to hydrate the console and preview with the latest demo run.  
   - Use **Open Browser Pane** to point the embedded iframe at any URL and tweak engine/headless toggles (console shows the simulated flow).  
-- Flow editor stub: add steps (action/selector/note) to build a JSON step list; wiring to the runner will follow in M3.
+- Flow editor stub: add steps (action/selector/note) to build a JSON step list; **Run via API** will send these to the runner now.
+- HAR/Trace links render in the artifact panel when returned by the API.
 - Capture an updated UI screenshot for docs: `go run ./cmd/capture_ui` (writes `artifacts/webui.png`).
 
 ## How the demo works
