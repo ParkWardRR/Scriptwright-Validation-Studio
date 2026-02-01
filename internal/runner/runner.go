@@ -235,8 +235,15 @@ func Run(opts Options) (Result, error) {
 	}
 
 	// Inject script pre-navigation to approximate engine execution.
-	if err := page.AddInitScript(playwright.Script{Content: playwright.String(string(scriptContent))}); err != nil {
-		logger.warn("runner", "init script injection failed; continuing", map[string]any{"error": err.Error()})
+	engineLower := strings.ToLower(opts.Engine)
+	installed := false
+	if strings.Contains(engineLower, "tampermonkey") {
+		installed = installTampermonkey(ctx, opts.ScriptPath, logger)
+	}
+	if !installed {
+		if err := page.AddInitScript(playwright.Script{Content: playwright.String(string(scriptContent))}); err != nil {
+			logger.warn("runner", "init script injection failed; continuing", map[string]any{"error": err.Error()})
+		}
 	}
 
 	start := time.Now()
@@ -652,6 +659,33 @@ func detectExtensionID(ctx playwright.BrowserContext) string {
 		}
 	}
 	return ""
+}
+
+// installTampermonkey attempts deterministic install of the provided userscript into TM MV3.
+// For now it opens the internal userscript.html import page and drops the file via file chooser.
+func installTampermonkey(ctx playwright.BrowserContext, scriptPath string, logger *ndjsonLogger) bool {
+	page, err := ctx.NewPage()
+	if err != nil {
+		logger.warn("tm", "new page failed", map[string]any{"error": err.Error()})
+		return false
+	}
+	localURL := "chrome-extension://ddddjjjklioejkhhafmeepjlcenalaol/userscript.html"
+	if _, err := page.Goto(localURL, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateNetworkidle}); err != nil {
+		logger.warn("tm", "open userscript.html failed", map[string]any{"error": err.Error()})
+		return false
+	}
+	input, err := page.QuerySelector("input[type=file]")
+	if err != nil || input == nil {
+		logger.warn("tm", "file input not found", map[string]any{"error": err})
+		return false
+	}
+	if err := input.SetInputFiles([]string{scriptPath}); err != nil {
+		logger.warn("tm", "set file failed", map[string]any{"error": err.Error()})
+		return false
+	}
+	page.WaitForTimeout(1200)
+	logger.info("tm", "script dropped into TM import", nil)
+	return true
 }
 
 // executeSteps runs a minimal action/assertion DSL against the page.

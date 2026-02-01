@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"philadelphia/internal/runner"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -123,6 +125,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/health", s.health)
 	mux.HandleFunc("/v1/runs", s.handleRuns)
 	mux.HandleFunc("/v1/runs/", s.handleRunByID)
+	mux.HandleFunc("/v1/extensions", s.handleExtensions)
 	// static files for artifacts
 	runsDir := filepath.Join(s.workspace, "runs")
 	mux.Handle("/runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(runsDir))))
@@ -227,6 +230,43 @@ func (s *server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown path"})
+}
+
+func (s *server) handleExtensions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST only"})
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing file"})
+		return
+	}
+	defer file.Close()
+	name := header.Filename
+	if name == "" {
+		name = fmt.Sprintf("ext-%d", time.Now().Unix())
+	}
+	dest := filepath.Join("extensions", name)
+	if err := os.MkdirAll("extensions", 0o755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	out, err := os.Create(dest)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, file); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": dest})
 }
 
 func normalizeManifestPaths(res runner.Result) runner.Manifest {
