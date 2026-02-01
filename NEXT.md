@@ -1,281 +1,547 @@
-# What's Next — Priority Roadmap
+# What's Next — Roadmap & Remediation Plan
 
-**Status:** Project is ~45% complete. Core functionality works, but advanced features are missing.
+**Project Status:** 45% complete, working prototype
+**Security Status:** ⚠️ 3 CRITICAL vulnerabilities (must fix before production)
+**Priority:** Security fixes → Reliability → Features
 
 ---
 
-## Current State (What Works Today)
+## 📊 Current State
 
-✅ **You can:**
-- Load a userscript from file, URL, or Git
-- Run it in Chromium (via Playwright)
-- Get screenshots, videos, and logs
+### ✅ What Works Today
+- Load userscripts (file, URL, Git)
+- Run in Chromium (via Playwright)
+- Capture screenshots, videos, logs
 - Test DOM actions (click, fill, wait, assert)
-- Check visual regressions (pixel diffs)
-- Inspect network traffic (blocked hosts, status codes)
-- Use the web UI or CLI
-- Deploy to a server
+- Visual regression (pixel diffs)
+- Network assertions (blocked hosts, status codes)
+- Web UI and CLI
+- Server deployment
 
-❌ **You cannot:**
-- Automatically load Tampermonkey/Violentmonkey reliably
-- Save projects/suites for reuse
-- Stream logs in real-time
-- View traces/HAR files in the UI
-- Run multiple tests concurrently
-- Export test bundles for CI
-- Retry failed tests automatically
+### ❌ What Doesn't Work
+- Reliable Tampermonkey/Violentmonkey loading
+- Project/suite persistence
+- Real-time log streaming
+- Embedded trace/HAR viewers
+- Concurrent test execution
+- CI/CD integration
+
+### 🚨 Security Issues (CRITICAL)
+1. **Path Traversal** in extension upload → Arbitrary file write
+2. **Command Injection** in git/ffmpeg → Remote code execution
+3. **No Authentication** on REST API → Unauthenticated access
+
+**⚠️ DO NOT use in production until Phase 1 security fixes are applied!**
 
 ---
 
-## Priority Fixes (Critical — Do First)
+## 🎯 Week-by-Week Plan
 
-### 1. Fix Trace Capture Timing Bug
-**Problem:** Trace starts/stops AFTER page closes, so artifacts may not be captured.
-**Impact:** High (trace files might be empty)
-**Effort:** Low (1-2 hours)
-**Action:**
+### Week 1: CRITICAL Security Fixes (MUST DO FIRST)
+
+**Priority:** Blocking for production
+**Estimated Time:** 3-4 days
+
+#### Day 1-2: Fix Security Vulnerabilities
+
+**1.1 Path Traversal Fix**
 ```go
-// In runner.go, move trace Start before page operations
+// File: cmd/lab/main.go:262-267
+// BEFORE (VULNERABLE):
+name := header.Filename
+dest := filepath.Join("extensions", name)
+out, err := os.Create(dest)
+
+// AFTER (SECURE):
+func sanitizeFilename(filename string) (string, error) {
+    base := filepath.Base(filename)
+    if strings.Contains(base, "..") || strings.HasPrefix(base, ".") {
+        return "", fmt.Errorf("invalid filename: %s", filename)
+    }
+    ext := filepath.Ext(base)
+    allowedExts := map[string]bool{".crx": true, ".xpi": true, ".zip": true}
+    if !allowedExts[ext] {
+        return "", fmt.Errorf("invalid extension: %s", ext)
+    }
+    hash := sha256.Sum256([]byte(base + time.Now().String()))
+    return hex.EncodeToString(hash[:8]) + ext, nil
+}
+```
+
+**1.2 Command Injection Fix**
+```go
+// File: internal/runner/runner.go:823
+// Add validation before git clone
+func validateGitURL(repo string) error {
+    u, err := url.Parse(repo)
+    if err != nil {
+        return fmt.Errorf("invalid git URL: %w", err)
+    }
+    if u.Scheme != "https" && u.Scheme != "http" {
+        return fmt.Errorf("unsupported scheme: %s", u.Scheme)
+    }
+    dangerous := []string{"|", ";", "&", "$", "`", "\n"}
+    for _, char := range dangerous {
+        if strings.Contains(repo, char) {
+            return fmt.Errorf("invalid characters in URL")
+        }
+    }
+    return nil
+}
+```
+
+**1.3 Add Authentication**
+```go
+// File: cmd/lab/main.go
+// Add middleware
+func (a *authMiddleware) authenticate(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        if a.apiKey == "" {
+            next(w, r)
+            return
+        }
+        auth := r.Header.Get("Authorization")
+        if !strings.HasPrefix(auth, "Bearer ") {
+            writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+            return
+        }
+        token := strings.TrimPrefix(auth, "Bearer ")
+        if subtle.ConstantTimeCompare([]byte(token), []byte(a.apiKey)) != 1 {
+            writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid key"})
+            return
+        }
+        next(w, r)
+    }
+}
+
+// Usage: export API_KEY="your-secret-here"
+```
+
+#### Day 3: Testing & Validation
+- Test path traversal attempts (should fail)
+- Test command injection (should fail)
+- Test authenticated/unauthenticated requests
+- Security scan
+
+#### Day 4: Deploy Security Fixes
+- Commit changes
+- Deploy to production
+- Update documentation
+
+**Acceptance Criteria:**
+- ✅ All file uploads sanitized
+- ✅ All external commands validated
+- ✅ API requires authentication
+- ✅ Security scan passes
+
+---
+
+### Week 2: Quick Wins (Reliability)
+
+**Priority:** High value, low effort
+**Estimated Time:** 4-5 days
+
+#### Day 1: Fix Trace Timing Bug
+```go
+// Move trace Start BEFORE page operations
 if opts.CaptureTrace {
-    ctx.Tracing().Start(...) // Move this BEFORE navigate
+    ctx.Tracing().Start(...)  // Before navigate
 }
 // ... page operations ...
 if opts.CaptureTrace {
-    ctx.Tracing().Stop(...)  // Keep this BEFORE page.Close()
+    ctx.Tracing().Stop(...)   // Before page.Close()
 }
 ```
 
-### 2. Add `lab doctor` Command
-**Problem:** No way to validate Playwright installation or dependencies.
-**Impact:** Medium (users confused by "browser not found" errors)
-**Effort:** Low (2-3 hours)
-**Action:**
+#### Day 2: Add `lab doctor` Command
 ```bash
-# Should check:
-# - Playwright binary exists
-# - Chromium browser installed
-# - ffmpeg available (for video)
-# - webp tools available
 lab doctor
+# Checks:
+# - Playwright binary exists
+# - Chromium installed
+# - ffmpeg available
+# - webp tools available
 ```
 
-### 3. Improve Extension Detection Logging
-**Problem:** Extension loading fails silently, user doesn't know why.
-**Impact:** High (users think it's working when it's not)
-**Effort:** Low (1 hour)
-**Action:** Add clear logs when extension not found, falls back to init-script.
-
----
-
-## Quick Wins (High Value, Low Effort)
-
-### 4. Add HAR/Trace Download Buttons in UI
-**Problem:** Links exist but not obvious.
-**Impact:** Medium
-**Effort:** Low (1 hour)
-**Action:** Add prominent "Download HAR" / "Download Trace" buttons in artifact panel.
-
-### 5. Show Run Duration in UI
-**Problem:** Manifest has duration_sec but UI doesn't display it.
-**Impact:** Low (nice to have)
-**Effort:** Low (30 min)
-**Action:** Add duration to manifest info panel.
-
-### 6. Add "Copy curl command" Button
-**Problem:** Users don't know how to reproduce runs via API.
-**Impact:** Medium
-**Effort:** Low (1 hour)
-**Action:** Generate curl command from current settings, let user copy.
-
----
-
-## Medium-Term Features (1-2 Weeks Each)
-
-### 7. Real-Time Log Streaming
-**Problem:** Logs are static files, not live.
-**Solution:** WebSocket streaming
-**Effort:** Medium (3-5 days)
-**Benefits:**
-- See logs as they happen
-- Better debugging experience
-- Feels more responsive
-
-### 8. Extension Bundling System
-**Problem:** Extensions must be manually downloaded/unzipped.
-**Solution:** Auto-download and cache extensions
-**Effort:** Medium (3-4 days)
-**Benefits:**
-- One-click setup
-- Reproducible runs
-- Version pinning
-
-### 9. Formal Checklist Schema
-**Problem:** Flow steps are ad-hoc, no validation schema.
-**Solution:** Define JSON schema for test checklists
-**Effort:** Medium (4-5 days)
-**Benefits:**
-- Reusable test suites
-- Validation before run
+#### Day 3: Improve Extension Logging
+- Add clear logs when extension not found
+- Show fallback to init-script
 - Better error messages
 
----
+#### Day 4-5: UI Improvements
+- Add HAR/Trace download buttons
+- Show run duration
+- Add "Copy curl command" button
 
-## Major Features (4-6 Weeks Each)
-
-### 10. React + TypeScript UI Rewrite
-**Problem:** Current UI is vanilla HTML/JS, hard to extend.
-**Solution:** Rebuild in React + TypeScript
-**Effort:** High (6-8 weeks)
-**Benefits:**
-- Better UX (animations, responsiveness)
-- Easier to add features
-- Component reuse
-
-**Not a priority right now.** The vanilla UI works for MVP.
-
-### 11. SQLite Persistence Layer
-**Problem:** No way to save projects, suites, or configs.
-**Solution:** Add SQLite for structured storage
-**Effort:** High (4-6 weeks)
-**Benefits:**
-- Save/load test suites
-- Project organization
-- Run history
-
-**Medium priority.** Needed for multi-user or team usage.
-
-### 12. Embedded Trace/HAR Viewers
-**Problem:** Trace/HAR files download, not viewable in-app.
-**Solution:** Embed viewers (iframe or component)
-**Effort:** High (4-5 weeks)
-**Benefits:**
-- No external tools needed
-- Better debugging workflow
-
-**Medium priority.** Nice to have, not critical.
+**Acceptance Criteria:**
+- ✅ Trace files captured correctly
+- ✅ `lab doctor` validates installation
+- ✅ Clear extension status logs
+- ✅ UI improvements deployed
 
 ---
 
-## CI/CD Integration (Future)
+### Week 3-4: Architecture Refactoring
 
-### 13. GitHub Actions Template
-**Effort:** Medium (2-3 weeks)
-**Requires:** CLI export command, deterministic runs
-**Benefits:** Run tests on PRs, artifact upload
+**Priority:** Medium (improves maintainability)
+**Estimated Time:** 8-10 days
 
-### 14. Export Bundles
-**Effort:** Low (1-2 days)
-**Benefits:** Share test results, archive runs
+#### Extract Components
+
+Break up monolithic `Run()` function (282 lines → multiple files):
+
+```
+internal/runner/
+├── runner.go          # Orchestrator (100 lines)
+├── script_loader.go   # Load scripts
+├── engine_manager.go  # TM/VM installation
+├── browser_manager.go # Playwright lifecycle
+├── flow_executor.go   # Execute steps
+├── artifact_collector.go  # Screenshots, videos
+├── visual_differ.go   # Visual regression
+└── manifest_builder.go    # Build results
+```
+
+**New Architecture:**
+```go
+type Runner struct {
+    scriptLoader      *ScriptLoader
+    engineManager     *EngineManager
+    browserManager    *BrowserManager
+    flowExecutor      *FlowExecutor
+    artifactCollector *ArtifactCollector
+    visualDiffer      *VisualDiffer
+    manifestBuilder   *ManifestBuilder
+    logger            Logger
+}
+
+func (r *Runner) Run(ctx context.Context, opts Options) (Result, error) {
+    script, err := r.scriptLoader.Load(ctx, opts)
+    if err != nil {
+        return Result{}, fmt.Errorf("load script: %w", err)
+    }
+    browser, err := r.browserManager.Launch(ctx, opts)
+    if err != nil {
+        return Result{}, fmt.Errorf("launch browser: %w", err)
+    }
+    defer browser.Close()
+    // ... etc
+}
+```
+
+#### Error Handling
+
+**Replace:**
+```go
+_ = os.RemoveAll(dir)  // BAD: Silent failure
+```
+
+**With:**
+```go
+if err := os.RemoveAll(dir); err != nil {
+    logger.Warn("cleanup failed", "dir", dir, "error", err)
+}
+```
+
+#### Concurrency Safety
+
+Add job queue for concurrent runs:
+```go
+type JobQueue struct {
+    jobs    chan Job
+    results map[string]chan Result
+    workers int
+}
+
+func (q *JobQueue) Submit(id string, opts Options) <-chan Result {
+    resultChan := make(chan Result, 1)
+    q.results[id] = resultChan
+    q.jobs <- Job{ID: id, Options: opts}
+    return resultChan
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Run() function < 150 lines
+- ✅ No functions > 100 lines
+- ✅ Error handling consistent
+- ✅ Concurrent requests safe
 
 ---
 
-## Immediate Next Steps (This Week)
+### Week 5: Observability & Testing
 
-**For a working, useful tool:**
+**Priority:** Medium
+**Estimated Time:** 5-7 days
 
-1. **Fix trace timing** (1-2 hours)
-2. **Add `lab doctor`** (2-3 hours)
-3. **Improve extension logging** (1 hour)
-4. **Test Tampermonkey loading with actual binary** (3-4 hours)
+#### Structured Logging
+```go
+import "log/slog"
 
-**Total:** ~1 day of work
+logger := slog.New(slog.NewJSONHandler(logFile, nil))
+logger.Info("run started",
+    "run_id", runID,
+    "url", opts.TargetURL,
+    "engine", opts.Engine,
+)
+```
 
-After that, the tool will be:
-- ✅ Stable for basic use
-- ✅ Good for demos/prototyping
-- ✅ Deployable to teams
+#### Request Logging
+```go
+func loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        next(w, r)
+        slog.Info("request",
+            "method", r.Method,
+            "path", r.URL.Path,
+            "duration_ms", time.Since(start).Milliseconds(),
+        )
+    }
+}
+```
+
+#### Unit Tests (Target: 60% Coverage)
+```go
+func TestScriptLoader_LoadFromFile(t *testing.T) {
+    loader := NewScriptLoader()
+    tmpfile, _ := os.CreateTemp("", "test-*.user.js")
+    defer os.Remove(tmpfile.Name())
+
+    script, err := loader.Load(context.Background(), Options{
+        ScriptPath: tmpfile.Name(),
+    })
+    assert.NoError(t, err)
+    assert.NotEmpty(t, script.Content)
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Structured logging (slog)
+- ✅ Request/response logging
+- ✅ Unit test coverage ≥ 60%
+- ✅ Integration tests for happy path
 
 ---
 
-## What Should You Build First?
+## 🚀 Medium-Term Features (Weeks 6-10)
 
-**If you want:**
-- **Reliability:** Fix trace bug, add `lab doctor`, test extensions
-- **User experience:** Real-time logs, better UI feedback
-- **Team usage:** Persistence layer, export bundles
-- **CI integration:** GitHub Actions template, retry logic
-- **Polish:** React UI, embedded viewers, animations
+### Real-Time Log Streaming (Week 6)
+- **Effort:** 3-5 days
+- **Tech:** WebSocket
+- **Benefit:** Better debugging
 
-**Recommendation:** Start with reliability fixes (this week), then decide based on user feedback.
+### Extension Bundling (Week 7)
+- **Effort:** 3-4 days
+- **Benefit:** One-click setup, reproducible
+
+### Formal Checklist Schema (Week 8)
+- **Effort:** 4-5 days
+- **Benefit:** Reusable test suites
+
+### Export Bundles (Week 9)
+- **Effort:** 1-2 days
+- **Benefit:** Share results, CI integration
+
+### GitHub Actions Template (Week 10)
+- **Effort:** 2-3 weeks
+- **Benefit:** Automated testing
 
 ---
 
-## Long-Term Vision (6+ Months)
+## 📈 Long-Term Features (Months 3-6)
 
-### Full "Pro Workflow" Features
-- Multi-user support
-- Run history & comparison
-- Performance benchmarks
-- Automated flake detection
-- Slack/Discord notifications
-- Cost tracking (Playwright minutes)
+### React + TypeScript UI Rewrite
+- **Effort:** 6-8 weeks
+- **Recommendation:** Wait until 10+ active users
+
+### SQLite Persistence Layer
+- **Effort:** 4-6 weeks
+- **Benefit:** Save projects, suites, history
+- **Recommendation:** Wait until 5+ active users
+
+### Embedded Trace/HAR Viewers
+- **Effort:** 4-5 weeks
+- **Priority:** Medium (nice to have)
 
 ### Enterprise Features
+- Multi-user support
 - SSO/RBAC
 - Audit logs
-- Custom runners (Docker-in-Docker)
 - Distributed execution
-- Private extension hosting
 
 **Not needed for MVP.** Focus on core functionality first.
 
 ---
 
-## Decision Points
+## 🎯 This Week's Action Items
 
-### Should You Rewrite the UI?
+**For production readiness:**
 
-**Pros:**
-- Better UX, easier to extend, modern stack
+1. **Fix path traversal vulnerability** (4 hours)
+2. **Fix command injection vulnerability** (4 hours)
+3. **Add authentication middleware** (4 hours)
+4. **Security testing** (4 hours)
+5. **Deploy security fixes** (2 hours)
 
-**Cons:**
-- 6-8 weeks of work, delays other features
+**Total: ~18 hours (2-3 days)**
 
-**Recommendation:** **No, not yet.** The vanilla UI is good enough for alpha. Rewrite when you have users asking for specific features.
-
-### Should You Add Violentmonkey Support?
-
-**Pros:**
-- Broader engine coverage
-
-**Cons:**
-- VM doesn't work on Chromium (MV2 deprecated), requires Firefox setup
-
-**Recommendation:** **Low priority.** Focus on Tampermonkey (works on Chromium) first.
-
-### Should You Build Persistence Now?
-
-**Pros:**
-- Enables reusable test suites, better for teams
-
-**Cons:**
-- 4-6 weeks of work, schema design complexity
-
-**Recommendation:** **Wait until you have 5+ active users.** Single runs are fine for prototyping.
+After this week, the app will be:
+- ✅ Secure for production use
+- ✅ Protected against major attacks
+- ✅ Ready for wider deployment
 
 ---
 
-## Summary: What to Do Next
+## 📋 Detailed Implementation Guide
 
-### This Week (Critical)
-1. Fix trace timing bug
-2. Add `lab doctor` command
-3. Test extension loading with real TM binary
+### Security Fix Checklist
 
-### Next 2 Weeks (High Value)
-4. Real-time log streaming (WebSocket)
-5. Extension bundling system
-6. Better error messages
+**Path Traversal:**
+- [ ] Add `sanitizeFilename()` function
+- [ ] Validate file extensions (.crx, .xpi, .zip only)
+- [ ] Use absolute paths
+- [ ] Check destination is within allowed directory
+- [ ] Add file size limits
+- [ ] Test with malicious filenames
 
-### Next Month (Polish)
-7. Formal checklist schema
-8. Export bundles
-9. GitHub Actions template
+**Command Injection:**
+- [ ] Add `validateGitURL()` function
+- [ ] Whitelist HTTPS/HTTP schemes only
+- [ ] Reject dangerous characters
+- [ ] Use `CommandContext` with timeout
+- [ ] Clear environment variables
+- [ ] Validate ffmpeg/webp paths
+- [ ] Test with injection attempts
 
-### Someday (Not Urgent)
-- React UI rewrite
-- Persistence layer
-- Embedded viewers
-- CI/CD integration
+**Authentication:**
+- [ ] Create auth middleware
+- [ ] Add API key validation (constant-time compare)
+- [ ] Protect sensitive endpoints (/v1/runs, /v1/extensions)
+- [ ] Leave /health and /ui/ public
+- [ ] Add rate limiting (10 req/min)
+- [ ] Add request logging
+- [ ] Update documentation
 
-**Focus:** Get the core loop (load → test → view results) rock-solid before adding advanced features.
+---
+
+## 🔍 Code Quality Standards
+
+**For all new code:**
+- [ ] No function > 100 lines
+- [ ] Cyclomatic complexity < 15
+- [ ] All errors checked (no `_` blank assignments)
+- [ ] Errors wrapped with context
+- [ ] Unit tests for business logic
+- [ ] Integration tests for critical paths
+- [ ] Structured logging (slog)
+- [ ] No sensitive data in logs
+- [ ] Public functions documented
+
+---
+
+## 📊 Success Metrics
+
+**Before Remediation:**
+- Security: D (3 critical vulnerabilities)
+- Maintainability: D (god functions)
+- Test Coverage: 5%
+
+**After Phase 1 (Week 1):**
+- Security: B (critical issues fixed)
+- Maintainability: D (unchanged)
+- Test Coverage: 5%
+
+**After Phase 2-3 (Week 5):**
+- Security: A (all issues fixed)
+- Maintainability: B (refactored)
+- Test Coverage: 60%+
+
+**Key Performance Indicators:**
+- Time to add feature: 50% reduction
+- Mean time to debug: 70% reduction
+- Security incidents: 0
+- Production uptime: 99%+
+
+---
+
+## 🤔 Decision Guide
+
+### Should You Fix Security Issues First?
+**Answer: YES!** (Non-negotiable)
+- Current state: Vulnerable to attacks
+- Impact: Critical (data loss, unauthorized access)
+- Effort: Low (2-3 days)
+
+### Should You Rewrite the UI?
+**Answer: Not yet**
+- Vanilla UI works for alpha
+- React rewrite = 6-8 weeks
+- Wait until 10+ active users
+- **Recommendation:** Focus on reliability first
+
+### Should You Add Violentmonkey?
+**Answer: Low priority**
+- VM doesn't work on Chromium (MV2 deprecated)
+- Requires Firefox setup
+- **Recommendation:** Focus on Tampermonkey first
+
+### Should You Build Persistence Now?
+**Answer: Wait**
+- 4-6 weeks effort
+- Only needed for multi-user
+- **Recommendation:** Wait until 5+ active users
+
+---
+
+## 📚 Additional Resources
+
+### Testing
+```bash
+# Run tests
+go test ./...
+
+# With coverage
+go test -cover ./...
+
+# With race detection
+go test -race ./...
+```
+
+### Security Scanning
+```bash
+# Install gosec
+go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+# Run security scan
+gosec ./...
+```
+
+### Deployment
+```bash
+# Deploy security fixes
+./deploy.sh
+
+# Check service status
+ssh -i ~/.ssh/scriptwright alfa@scriptwright "sudo systemctl status userscript-lab"
+```
+
+---
+
+## 🎯 Summary: What to Do Next
+
+1. **This Week:** Security fixes (CRITICAL)
+2. **Next Week:** Quick wins (reliability)
+3. **Weeks 3-4:** Architecture refactoring
+4. **Week 5:** Testing & observability
+5. **Weeks 6-10:** Medium-term features
+6. **Months 3-6:** Long-term features (if needed)
+
+**Focus:** Security → Reliability → Features
+
+The app works but needs security fixes before production use. Following this plan gets it production-ready in ~5 weeks.
+
+---
+
+**Document Version:** 2.0 (Combined NEXT.md + REMEDIATION.md)
+**Last Updated:** 2026-01-31
