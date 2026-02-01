@@ -51,7 +51,8 @@ type Step struct {
 	Action string `json:"action"`
 	Target string `json:"target,omitempty"`
 	Value  string `json:"value,omitempty"`
-	Assert string `json:"assert,omitempty"` // e.g., "text-equals"
+	Assert string `json:"assert,omitempty"` // e.g., "text-equals", "contains", "exists", "not-exists", "attr"
+	Attr   string `json:"attr,omitempty"`   // used with assert attr
 }
 
 // Result contains artifact paths and manifest.
@@ -683,7 +684,7 @@ func executeSteps(page playwright.Page, steps []Step, logger *ndjsonLogger) {
 			}
 			page.WaitForTimeout(d)
 			logger.info(scope, "waited", map[string]any{"ms": d})
-		case "assert-text":
+		case "assert-text", "assert-equals":
 			text, err := page.TextContent(step.Target)
 			if err != nil {
 				logger.warn(scope, "assert-text failed", map[string]any{"error": err.Error(), "target": step.Target})
@@ -694,6 +695,42 @@ func executeSteps(page playwright.Page, steps []Step, logger *ndjsonLogger) {
 				logger.warn(scope, "assert-text mismatch", map[string]any{"target": step.Target, "expected": step.Value, "got": got})
 			} else {
 				logger.info(scope, "assert-text ok", map[string]any{"target": step.Target, "value": got})
+			}
+		case "assert-contains":
+			text, err := page.TextContent(step.Target)
+			if err != nil {
+				logger.warn(scope, "assert-contains failed", map[string]any{"error": err.Error(), "target": step.Target})
+				continue
+			}
+			got := strings.TrimSpace(text)
+			if !strings.Contains(got, step.Value) {
+				logger.warn(scope, "assert-contains mismatch", map[string]any{"target": step.Target, "expected_substring": step.Value, "got": got})
+			} else {
+				logger.info(scope, "assert-contains ok", map[string]any{"target": step.Target, "value": got})
+			}
+		case "assert-exists":
+			if _, err := page.WaitForSelector(step.Target, playwright.PageWaitForSelectorOptions{Timeout: playwright.Float(5000)}); err != nil {
+				logger.warn(scope, "assert-exists failed", map[string]any{"error": err.Error(), "target": step.Target})
+			} else {
+				logger.info(scope, "assert-exists ok", map[string]any{"target": step.Target})
+			}
+		case "assert-not-exists":
+			_, err := page.WaitForSelector(step.Target, playwright.PageWaitForSelectorOptions{Timeout: playwright.Float(3000), State: playwright.WaitForSelectorStateDetached})
+			if err != nil {
+				logger.warn(scope, "assert-not-exists failed", map[string]any{"error": err.Error(), "target": step.Target})
+			} else {
+				logger.info(scope, "assert-not-exists ok", map[string]any{"target": step.Target})
+			}
+		case "assert-attr":
+			val, err := page.GetAttribute(step.Target, step.Attr)
+			if err != nil {
+				logger.warn(scope, "assert-attr failed", map[string]any{"error": err.Error(), "target": step.Target, "attr": step.Attr})
+				continue
+			}
+			if val != step.Value {
+				logger.warn(scope, "assert-attr mismatch", map[string]any{"target": step.Target, "attr": step.Attr, "expected": step.Value, "got": val})
+			} else {
+				logger.info(scope, "assert-attr ok", map[string]any{"target": step.Target, "attr": step.Attr, "value": val})
 			}
 		default:
 			logger.warn(scope, "unknown action", map[string]any{"action": step.Action})

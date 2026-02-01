@@ -138,6 +138,14 @@
       traceLink.href = manifest.trace_zip;
       appendLog('artifact', `Trace: ${manifest.trace_zip}`);
     }
+    if (manifest.visual_diff_img) {
+      appendLog('artifact', `Visual diff pixels=${manifest.visual_diff_pixels || '?'} ratio=${(manifest.visual_diff_ratio*100 || 0).toFixed(2)}%`);
+      const diffEl = document.getElementById('visual-diff');
+      if (diffEl) {
+        diffEl.src = manifest.visual_diff_img;
+        diffEl.style.display = 'block';
+      }
+    }
   }
 
   document.getElementById('start-run').addEventListener('click', startRun);
