@@ -30,7 +30,7 @@
     <section class="panel settings">
       <div class="panel-head">
         <h2>Settings</h2>
-        <button id="simulate-run" class="primary">Simulate Run</button>
+        <button id="start-run" class="primary">Run via API</button>
       </div>
       <label>Target URL <input id="target-url" type="text" value="https://en.wikipedia.org/wiki/Tampermonkey" /></label>
       <label>Userscript <input id="script-path" type="text" value="scripts/wikipedia-dark.user.js" /></label>
@@ -55,6 +55,7 @@
       <div class="actions">
         <button id="launch" class="ghost">Open Browser Pane</button>
         <button id="load-artifacts" class="ghost">Load Sample Artifacts</button>
+        <span id="backend-status" class="chip">API: checking…</span>
       </div>
     </section>
 

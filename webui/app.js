@@ -9,6 +9,7 @@
   const chipEngine = document.getElementById('chip-engine');
   const screenshot = document.getElementById('screenshot');
   const webp = document.getElementById('webp');
+  const backendStatus = document.getElementById('backend-status');
 
   const metaName = document.getElementById('meta-name');
   const metaMatch = document.getElementById('meta-match');
@@ -49,17 +50,76 @@
     appendLog('runner', `Opening ${url} (headless=${document.getElementById('headless').value})`);
   });
 
-  document.getElementById('simulate-run').addEventListener('click', () => {
-    appendLog('runner', 'Starting simulated run…');
+  async function startRun() {
+    if (!backendAvailable) {
+      simulate();
+      return;
+    }
+    appendLog('runner', 'Starting run via API…');
+    const payload = {
+      url: urlInput.value.trim(),
+      script: document.getElementById('script-path').value.trim(),
+      engine: engineInput.value,
+      extension_dir: '',
+      headless: document.getElementById('headless').value === 'true',
+    };
+    try {
+      const res = await fetch(`${apiBase}/v1/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `status ${res.status}`);
+      }
+      const manifest = await res.json();
+      applyManifest(manifest);
+      appendLog('runner', 'Run complete ✓');
+    } catch (err) {
+      appendLog('runner', `Run failed: ${err.message}`);
+      simulate();
+    }
+  }
+
+  function simulate() {
+    appendLog('runner', 'Simulating run (backend unavailable)…');
     setTimeout(() => appendLog('browser', 'Persistent context launched (Chromium)'), 300);
     setTimeout(() => appendLog('browser', 'Userscript installed (stub: init script injection)'), 700);
     setTimeout(() => appendLog('page', 'Navigated to target; waiting for toggle button'), 1200);
     setTimeout(() => appendLog('page', 'Clicked "Toggle Dark Mode"'), 1600);
     setTimeout(() => appendLog('artifact', `Captured screenshot & video (trace=${captureTrace.checked}, har=${captureHar.checked})`), 2000);
     setTimeout(() => appendLog('runner', 'Run complete ✓'), 2300);
-  });
+  }
+
+  function applyManifest(manifest) {
+    metaName.textContent = manifest.script_meta?.Name || manifest.script_meta?.name || '—';
+    metaMatch.textContent = (manifest.script_meta?.Match || []).join(', ');
+    const started = new Date(manifest.started_at || manifest.StartedAt);
+    const finished = new Date(manifest.finished_at || manifest.FinishedAt);
+    metaDuration.textContent = isNaN(started) || isNaN(finished) ? '—' : `${((finished - started) / 1000).toFixed(1)}s`;
+    metaProfile.textContent = manifest.profile_folder || manifest.ProfileFolder || 'temp profile';
+    if (manifest.screenshot) screenshot.src = manifest.screenshot;
+    if (manifest.video_webp) webp.src = manifest.video_webp;
+  }
+
+  document.getElementById('start-run').addEventListener('click', startRun);
 
   // bootstrap
+  let backendAvailable = false;
+  let apiBase = 'http://localhost:8787';
+  async function detectBackend() {
+    try {
+      const res = await fetch(`${apiBase}/health`, { mode: 'cors' });
+      backendAvailable = res.ok;
+    } catch {
+      backendAvailable = false;
+    }
+    backendStatus.textContent = backendAvailable ? 'API: ready' : 'API: offline (simulated)';
+    backendStatus.className = 'chip';
+  }
+
   appendLog('ui', 'Web UI ready. Load sample artifacts or launch a page.');
+  detectBackend();
   if (window.sampleRun) loadSample();
 })();

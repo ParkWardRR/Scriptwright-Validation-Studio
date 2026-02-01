@@ -3,14 +3,14 @@
 ## Milestones (checklist)
 - [ ] M0 — Spike (goal: extension + userscript automation feasibility)  
   - [x] Demo run produced with Playwright persistent context and userscript execution (init-script injection) plus artifacts (PNG, WebP, manifest).  
-  - [ ] MV3 extension load + deterministic TM/VM install path.
+  - [~] MV3 extension load + deterministic TM/VM install path (API supports `--ext` dir; extension asset still needed/validated).
 - [ ] M1 — MVP runner (deterministic runs + artifacts)  
-  - [ ] `lab run` CLI with persistent profile mgmt.  
-  - [ ] Script ingestion (paste/file) feeding runs.  
-  - [ ] Basic DOM assertions + NDJSON logs.
+  - [x] `lab run` CLI with persistent profile mgmt.  
+  - [~] Script ingestion (file path supported; paste/git to follow).  
+  - [x] Basic DOM assertion + NDJSON logs.
 - [ ] M2 — UI v1 (usable pro workflow)  
   - [x] Prototype web UI shell with settings, embedded browser pane, console stream, and artifact preview.  
-  - [ ] Wire UI to runner API for live runs and artifact retrieval.
+  - [x] Wire UI to runner API for live runs and artifact retrieval (falls back to simulation when API offline).
 - [ ] M3 — “Testing to the max” (full checklist categories)  
   - [ ] Visual regression + network assertions + HAR record/replay toggle.  
   - [ ] Flow editor (step list) driving Playwright.

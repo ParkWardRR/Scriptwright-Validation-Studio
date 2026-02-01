@@ -17,6 +17,19 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
    - `wikipedia-dark.png` — full-page screenshot post-toggle  
    - `run.json` — manifest with parsed userscript metadata and run timings
 
+## CLI runner (`lab`)
+- One-off run:  
+  ```bash
+  go run ./cmd/lab run --url https://en.wikipedia.org/wiki/Tampermonkey --script scripts/wikipedia-dark.user.js --engine "Tampermonkey (init-script)"
+  ```  
+  Outputs manifest JSON and writes artifacts under `runs/<id>/`.
+- Serve API for the web UI:  
+  ```bash
+  go run ./cmd/lab serve --port 8787
+  ```  
+  Endpoints: `POST /v1/runs` (start run), `GET /v1/runs/{id}`, `GET /v1/runs/{id}/logs`, static artifacts under `/runs/…`.
+- MV3 extension loading: pass `--ext /path/to/extension` (or env `USERSCRIPT_ENGINE_EXT_DIR`) to use `--load-extension/--disable-extensions-except`. Falls back to init-script injection when unset.
+
 ## Web UI prototype (manual + future automated)
 <p align="center">
   <img src="artifacts/webui.png" alt="Web UI prototype with settings, embedded browser, and console" width="100%">
@@ -24,6 +37,7 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 
 - Launch locally:  
   - Open `webui/index.html` directly, or serve the repo root: `python -m http.server 8000` then visit `http://localhost:8000/webui/`.  
+  - (Optional) start the API: `go run ./cmd/lab serve --port 8787`. The UI will auto-detect it and use **Run via API**; otherwise it falls back to simulation.  
   - Click **Load Sample Artifacts** to hydrate the console and preview with the latest demo run.  
   - Use **Open Browser Pane** to point the embedded iframe at any URL and tweak engine/headless toggles (console shows the simulated flow).  
 - Capture an updated UI screenshot for docs: `go run ./cmd/capture_ui` (writes `artifacts/webui.png`).
