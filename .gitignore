@@ -1,0 +1,8 @@
+# Local scratch + Conductor context
+.context/
+
+# Playwright download cache (created at runtime if installed locally)
+node_modules/
+
+# Editor/OS cruft
+.DS_Store
