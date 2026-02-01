@@ -6,6 +6,13 @@
   const captureTrace = document.getElementById('capture-trace');
   const captureHar = document.getElementById('capture-har');
   const replayHar = document.getElementById('replay-har');
+  const scriptURL = document.getElementById('script-url');
+  const scriptGitRepo = document.getElementById('script-git-repo');
+  const scriptGitPath = document.getElementById('script-git-path');
+  const baselineDir = document.getElementById('baseline-dir');
+  const blockedHosts = document.getElementById('blocked-hosts');
+  const visualThreshold = document.getElementById('visual-threshold');
+  const thresholdValue = document.getElementById('threshold-value');
   const chipUrl = document.getElementById('chip-url');
   const chipEngine = document.getElementById('chip-engine');
   const screenshot = document.getElementById('screenshot');
@@ -70,13 +77,17 @@
     const payload = {
       url: urlInput.value.trim(),
       script: document.getElementById('script-path').value.trim(),
+      script_url: scriptURL.value.trim(),
+      script_git_repo: scriptGitRepo.value.trim(),
+      script_git_path: scriptGitPath.value.trim(),
       engine: engineInput.value,
       extension_dir: '',
       headless: document.getElementById('headless').value === 'true',
       har: captureHar.checked,
       replay_har: replayHar.value.trim(),
-      baseline: localStorage.getItem('baselineDir') || '',
-      blocked_hosts: (localStorage.getItem('blockedHosts') || '').split(',').map(s => s.trim()).filter(Boolean),
+      baseline: baselineDir.value.trim(),
+      blocked_hosts: (blockedHosts.value || '').split(',').map(s => s.trim()).filter(Boolean),
+      visual_threshold: Number(visualThreshold.value || 0),
       steps,
     };
     try {
@@ -177,7 +188,20 @@
   captureTrace.checked = localStorage.getItem('captureTrace') !== 'false';
   captureHar.checked = localStorage.getItem('captureHar') === 'true';
   replayHar.value = localStorage.getItem('replayHar') || '';
+  scriptURL.value = localStorage.getItem('scriptURL') || '';
+  scriptGitRepo.value = localStorage.getItem('scriptGitRepo') || '';
+  scriptGitPath.value = localStorage.getItem('scriptGitPath') || '';
+  baselineDir.value = localStorage.getItem('baselineDir') || '';
+  blockedHosts.value = localStorage.getItem('blockedHosts') || '';
+  visualThreshold.value = localStorage.getItem('visualThreshold') || '0';
+  thresholdValue.textContent = visualThreshold.value;
   document.getElementById('capture-trace').addEventListener('change', e => localStorage.setItem('captureTrace', e.target.checked));
   document.getElementById('capture-har').addEventListener('change', e => localStorage.setItem('captureHar', e.target.checked));
   replayHar.addEventListener('input', e => localStorage.setItem('replayHar', e.target.value));
+  scriptURL.addEventListener('input', e => localStorage.setItem('scriptURL', e.target.value));
+  scriptGitRepo.addEventListener('input', e => localStorage.setItem('scriptGitRepo', e.target.value));
+  scriptGitPath.addEventListener('input', e => localStorage.setItem('scriptGitPath', e.target.value));
+  baselineDir.addEventListener('input', e => localStorage.setItem('baselineDir', e.target.value));
+  blockedHosts.addEventListener('input', e => localStorage.setItem('blockedHosts', e.target.value));
+  visualThreshold.addEventListener('input', e => { localStorage.setItem('visualThreshold', e.target.value); thresholdValue.textContent = e.target.value; });
 })();

@@ -34,6 +34,9 @@
       </div>
       <label>Target URL <input id="target-url" type="text" value="https://en.wikipedia.org/wiki/Tampermonkey" /></label>
       <label>Userscript <input id="script-path" type="text" value="scripts/wikipedia-dark.user.js" /></label>
+      <label>Script URL (paste) <input id="script-url" type="text" placeholder="https://example.com/script.user.js" /></label>
+      <label>Git repo URL <input id="script-git-repo" type="text" placeholder="https://github.com/org/repo.git" /></label>
+      <label>Git file path <input id="script-git-path" type="text" placeholder="path/to/script.user.js" /></label>
       <label>Engine
         <select id="engine">
           <option>Tampermonkey (MV3)</option>
@@ -51,6 +54,16 @@
       </label>
       <label class="row">
         <input type="checkbox" id="capture-har" /> HAR
+      </label>
+      <label>Baseline dir
+        <input id="baseline-dir" type="text" placeholder="baselines" />
+      </label>
+      <label>Blocked hosts (comma)
+        <input id="blocked-hosts" type="text" placeholder="analytics.example.com, tracker.test" />
+      </label>
+      <label>Visual threshold
+        <input id="visual-threshold" type="range" min="0" max="255" value="0" />
+        <span id="threshold-value" class="chip">0</span>
       </label>
       <label>Replay HAR (path)
         <input id="replay-har" type="text" placeholder="runs/<id>/artifacts/network.har" />

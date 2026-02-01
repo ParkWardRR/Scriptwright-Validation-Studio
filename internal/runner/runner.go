@@ -30,6 +30,8 @@ type Options struct {
 	ScriptPath          string // optional if ScriptContent set
 	ScriptContent       string
 	ScriptURL           string // optional remote fetch
+	ScriptGitRepo       string // optional git repo URL
+	ScriptGitPath       string // path inside git repo
 	ExtensionDir        string // optional: path to unpacked MV3 extension (e.g., Tampermonkey)
 	Engine              string // display only for now
 	Headless            bool
@@ -104,8 +106,8 @@ func Run(opts Options) (Result, error) {
 		cwd, _ := os.Getwd()
 		opts.Workspace = cwd
 	}
-	if opts.ScriptPath == "" && opts.ScriptContent == "" && opts.ScriptURL == "" {
-		return Result{}, errors.New("either ScriptPath, ScriptContent, or ScriptURL must be provided")
+	if opts.ScriptPath == "" && opts.ScriptContent == "" && opts.ScriptURL == "" && opts.ScriptGitRepo == "" {
+		return Result{}, errors.New("provide ScriptPath, ScriptContent, ScriptURL, or ScriptGitRepo")
 	}
 	if opts.ScriptPath == "" && opts.ScriptContent != "" {
 		tmp, err := os.CreateTemp("", "userscript-*.user.js")
@@ -122,6 +124,13 @@ func Run(opts Options) (Result, error) {
 		tmp, err := fetchScript(opts.ScriptURL)
 		if err != nil {
 			return Result{}, fmt.Errorf("fetch script: %w", err)
+		}
+		opts.ScriptPath = tmp
+	}
+	if opts.ScriptPath == "" && opts.ScriptGitRepo != "" {
+		tmp, err := fetchScriptFromGit(opts.ScriptGitRepo, opts.ScriptGitPath)
+		if err != nil {
+			return Result{}, fmt.Errorf("git fetch: %w", err)
 		}
 		opts.ScriptPath = tmp
 	}
@@ -706,6 +715,34 @@ func fetchScript(url string) (string, error) {
 		return "", err
 	}
 	tmp, err := os.CreateTemp("", "userscript-url-*.user.js")
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return "", err
+	}
+	tmp.Close()
+	return tmp.Name(), nil
+}
+
+func fetchScriptFromGit(repo, filePath string) (string, error) {
+	if repo == "" || filePath == "" {
+		return "", errors.New("git repo and file path required")
+	}
+	dir, err := os.MkdirTemp("", "userscript-git-")
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command("git", "clone", "--depth", "1", repo, dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git clone: %v: %s", err, string(out))
+	}
+	target := filepath.Join(dir, filePath)
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp("", "userscript-git-*.user.js")
 	if err != nil {
 		return "", err
 	}

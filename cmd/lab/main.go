@@ -134,15 +134,20 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 type runRequest struct {
-	URL          string        `json:"url"`
-	Script       string        `json:"script"`
-	Engine       string        `json:"engine"`
-	ExtensionDir string        `json:"extension_dir"`
-	Headless     *bool         `json:"headless"`
-	HAR          bool          `json:"har"`
-	ReplayHAR    string        `json:"replay_har"`
-	Baseline     string        `json:"baseline"`
-	Steps        []runner.Step `json:"steps"`
+	URL             string        `json:"url"`
+	Script          string        `json:"script"`
+	ScriptURL       string        `json:"script_url"`
+	ScriptGitRepo   string        `json:"script_git_repo"`
+	ScriptGitPath   string        `json:"script_git_path"`
+	Engine          string        `json:"engine"`
+	ExtensionDir    string        `json:"extension_dir"`
+	Headless        *bool         `json:"headless"`
+	HAR             bool          `json:"har"`
+	ReplayHAR       string        `json:"replay_har"`
+	Baseline        string        `json:"baseline"`
+	BlockedHosts    []string      `json:"blocked_hosts"`
+	VisualThreshold float64       `json:"visual_threshold"`
+	Steps           []runner.Step `json:"steps"`
 }
 
 func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
@@ -164,17 +169,21 @@ func (s *server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	opts := runner.Options{
-		TargetURL:    req.URL,
-		ScriptPath:   req.Script,
-		Engine:       req.Engine,
-		ExtensionDir: strings.TrimSpace(req.ExtensionDir),
-		Headless:     true,
-		CaptureHAR:   req.HAR,
-		ReplayHAR:    strings.TrimSpace(req.ReplayHAR),
-		BaselineDir:  strings.TrimSpace(req.Baseline),
-		BlockedHosts: blocked,
-		Steps:        req.Steps,
-		Workspace:    s.workspace,
+		TargetURL:           req.URL,
+		ScriptPath:          req.Script,
+		ScriptURL:           req.ScriptURL,
+		ScriptGitRepo:       req.ScriptGitRepo,
+		ScriptGitPath:       req.ScriptGitPath,
+		Engine:              req.Engine,
+		ExtensionDir:        strings.TrimSpace(req.ExtensionDir),
+		Headless:            true,
+		CaptureHAR:          req.HAR,
+		ReplayHAR:           strings.TrimSpace(req.ReplayHAR),
+		BaselineDir:         strings.TrimSpace(req.Baseline),
+		VisualDiffThreshold: req.VisualThreshold,
+		BlockedHosts:        blocked,
+		Steps:               req.Steps,
+		Workspace:           s.workspace,
 	}
 	if req.Headless != nil {
 		opts.Headless = *req.Headless
