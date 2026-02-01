@@ -240,6 +240,9 @@ func Run(opts Options) (Result, error) {
 	if strings.Contains(engineLower, "tampermonkey") {
 		installed = installTampermonkey(ctx, opts.ScriptPath, logger)
 	}
+	if strings.Contains(engineLower, "violentmonkey") {
+		installed = installViolentmonkey(ctx, logger)
+	}
 	if !installed {
 		if err := page.AddInitScript(playwright.Script{Content: playwright.String(string(scriptContent))}); err != nil {
 			logger.warn("runner", "init script injection failed; continuing", map[string]any{"error": err.Error()})
@@ -694,6 +697,11 @@ func installTampermonkey(ctx playwright.BrowserContext, scriptPath string, logge
 	page.WaitForTimeout(1200)
 	logger.info("tm", "script dropped into TM import", nil)
 	return true
+}
+
+func installViolentmonkey(ctx playwright.BrowserContext, logger *ndjsonLogger) bool {
+	logger.info("vm", "VM install not automated yet; use Firefox profile", nil)
+	return false
 }
 
 // executeSteps runs a minimal action/assertion DSL against the page.
