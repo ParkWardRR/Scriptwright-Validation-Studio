@@ -36,7 +36,8 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - MV3 extension loading: pass `--ext /path/to/extension` (or env `USERSCRIPT_ENGINE_EXT_DIR`) to use `--load-extension/--disable-extensions-except`. Falls back to init-script injection when unset.
 - Visual regression starter: set `BASELINE_DIR` (or `Options.BaselineDir`) and the runner will create a baseline hash on first run and warn when the screenshot hash changes.
 - Network assertion starter: provide `BlockedHosts` (env `BLOCKED_HOSTS=host1,host2` planned) to surface blocked domains and 4xx/5xx responses in the manifest’s `network_issues`.
-- HAR toggle: `--har` writes `network.har` in the run artifacts for later replay/inspection.
+- HAR: `--har` writes `network.har` for inspection; `--replay-har /path/to.har` routes traffic from an existing HAR for deterministic offline runs (best-effort).
+- Extension bundles: drop unpacked builds into `extensions/` (e.g., `extensions/tampermonkey-mv3`, `extensions/violentmonkey-firefox`) and point `--ext` or `USERSCRIPT_ENGINE_EXT_DIR` there for deterministic loading.
 
 ## Web UI prototype (manual + future automated)
 <p align="center">
@@ -48,6 +49,7 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
   - (Optional) start the API: `go run ./cmd/lab serve --port 8787`. The UI will auto-detect it and use **Run via API**; otherwise it falls back to simulation.  
   - Click **Load Sample Artifacts** to hydrate the console and preview with the latest demo run.  
   - Use **Open Browser Pane** to point the embedded iframe at any URL and tweak engine/headless toggles (console shows the simulated flow).  
+- Flow editor stub: add steps (action/selector/note) to build a JSON step list; wiring to the runner will follow in M3.
 - Capture an updated UI screenshot for docs: `go run ./cmd/capture_ui` (writes `artifacts/webui.png`).
 
 ## How the demo works

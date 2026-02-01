@@ -45,7 +45,18 @@ func runCmd(args []string) {
 	headless := fs.Bool("headless", true, "Headless mode")
 	trace := fs.Bool("trace", false, "Capture trace (stub)")
 	har := fs.Bool("har", false, "Capture HAR (stub)")
+	replayHar := fs.String("replay-har", "", "Replay from HAR file")
+	baseline := fs.String("baseline", os.Getenv("BASELINE_DIR"), "Baseline dir for visual diff")
 	fs.Parse(args)
+
+	var blocked []string
+	if env := os.Getenv("BLOCKED_HOSTS"); env != "" {
+		for _, h := range strings.Split(env, ",") {
+			if trimmed := strings.TrimSpace(h); trimmed != "" {
+				blocked = append(blocked, trimmed)
+			}
+		}
+	}
 
 	opts := runner.Options{
 		TargetURL:    *url,
@@ -55,6 +66,9 @@ func runCmd(args []string) {
 		Headless:     *headless,
 		CaptureTrace: *trace,
 		CaptureHAR:   *har,
+		ReplayHAR:    strings.TrimSpace(*replayHar),
+		BaselineDir:  strings.TrimSpace(*baseline),
+		BlockedHosts: blocked,
 		Workspace:    ".",
 	}
 	res, err := runner.Run(opts)

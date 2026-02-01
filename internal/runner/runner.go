@@ -2,10 +2,14 @@ package runner
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +31,7 @@ type Options struct {
 	ProfileDir   string // optional persistent profile location
 	CaptureTrace bool
 	CaptureHAR   bool
+	ReplayHAR    string   // optional path to HAR for replay
 	BaselineDir  string   // for visual regression hashes
 	BlockedHosts []string // basic network assertion
 	Workspace    string   // base path; defaults to cwd
@@ -58,6 +63,7 @@ type Manifest struct {
 	VideoWebP     string          `json:"video_webp,omitempty"`
 	TraceZip      string          `json:"trace_zip,omitempty"`
 	HAR           string          `json:"har,omitempty"`
+	ReplayHAR     string          `json:"replay_har,omitempty"`
 	ScriptMeta    userscript.Meta `json:"script_meta"`
 	ProfileFolder string          `json:"profile_folder"`
 	Engine        string          `json:"engine"`
@@ -65,6 +71,7 @@ type Manifest struct {
 	LogPath       string          `json:"log_path"`
 	VisualHash    string          `json:"visual_hash,omitempty"`
 	VisualDiff    bool            `json:"visual_diff,omitempty"`
+	VisualDiffImg string          `json:"visual_diff_img,omitempty"`
 	NetworkIssues []string        `json:"network_issues,omitempty"`
 }
 
@@ -153,6 +160,14 @@ func Run(opts Options) (Result, error) {
 	}
 	defer ctx.Close()
 
+	if opts.ReplayHAR != "" {
+		if err := ctx.RouteFromHAR(opts.ReplayHAR); err != nil {
+			logger.warn("har", "route from HAR failed", map[string]any{"error": err.Error()})
+		} else {
+			logger.info("har", "replaying from HAR", map[string]any{"path": opts.ReplayHAR})
+		}
+	}
+
 	var responses []playwright.Response
 	ctx.OnResponse(func(resp playwright.Response) {
 		responses = append(responses, resp)
@@ -203,7 +218,7 @@ func Run(opts Options) (Result, error) {
 		logger.warn("artifact", "screenshot failed", map[string]any{"error": err.Error()})
 	}
 
-	visualHash, visualDiff := computeVisualHash(screenshotPath, opts, logger)
+	visualHash, visualDiff, visualDiffImg := computeVisualHash(screenshotPath, opts, artifactsDir, logger)
 
 	video := page.Video()
 	if err := page.Close(); err != nil {
@@ -247,10 +262,12 @@ func Run(opts Options) (Result, error) {
 		Screenshot:    filepath.Base(screenshotPath),
 		VisualHash:    visualHash,
 		VisualDiff:    visualDiff,
+		VisualDiffImg: visualDiffImg,
 		VideoWebM:     filepath.Base(videoPath),
 		VideoWebP:     filepath.Base(webpPath),
 		TraceZip:      "",
 		HAR:           harNameIfExists(artifactsDir),
+		ReplayHAR:     opts.ReplayHAR,
 		ScriptMeta:    scriptMeta,
 		ProfileFolder: profileDir,
 		Engine:        opts.Engine,
@@ -412,38 +429,39 @@ func DiscoverExtensionDir() string {
 }
 
 // computeVisualHash creates a SHA256 of the screenshot and compares to any baseline.
-func computeVisualHash(screenshotPath string, opts Options, logger *ndjsonLogger) (hash string, diff bool) {
+func computeVisualHash(screenshotPath string, opts Options, artifactsDir string, logger *ndjsonLogger) (hash string, diff bool, diffImg string) {
 	data, err := os.ReadFile(screenshotPath)
 	if err != nil || len(data) == 0 {
-		return "", false
+		return "", false, ""
 	}
 	sum := fmt.Sprintf("%x", sha256.Sum256(data))
 	hash = sum
 	if opts.BaselineDir == "" {
-		return hash, false
+		return hash, false, ""
 	}
 	if err := os.MkdirAll(opts.BaselineDir, 0o755); err != nil {
 		logger.warn("visual", "baseline dir create failed", map[string]any{"error": err.Error()})
-		return hash, false
+		return hash, false, ""
 	}
 	basePath := filepath.Join(opts.BaselineDir, "screenshot.png")
 	if _, err := os.Stat(basePath); err != nil {
 		_ = os.WriteFile(basePath, data, 0o644)
 		logger.info("visual", "baseline created", map[string]any{"path": basePath})
-		return hash, false
+		return hash, false, ""
 	}
 	baseData, err := os.ReadFile(basePath)
 	if err != nil {
 		logger.warn("visual", "baseline read failed", map[string]any{"error": err.Error()})
-		return hash, false
+		return hash, false, ""
 	}
 	baseHash := fmt.Sprintf("%x", sha256.Sum256(baseData))
 	if baseHash != hash {
 		logger.warn("visual", "screenshot hash mismatch vs baseline", map[string]any{"baseline": baseHash, "current": hash})
-		return hash, true
+		diffImg = computeDiffImage(baseData, data, artifactsDir, logger)
+		return hash, true, diffImg
 	}
 	logger.info("visual", "screenshot matches baseline", nil)
-	return hash, false
+	return hash, false, ""
 }
 
 func harNameIfExists(artifactsDir string) string {
@@ -474,4 +492,53 @@ func summarizeNetwork(responses []playwright.Response, blocked []string, logger 
 		logger.warn("network", "issues detected", map[string]any{"count": len(issues)})
 	}
 	return issues
+}
+
+// computeDiffImage generates a simple diff heatmap (red overlay) when sizes match.
+func computeDiffImage(basePNG, currentPNG []byte, artifactsDir string, logger *ndjsonLogger) string {
+	baseImg, err := png.Decode(bytes.NewReader(basePNG))
+	if err != nil {
+		logger.warn("visual", "decode baseline failed", map[string]any{"error": err.Error()})
+		return ""
+	}
+	currImg, err := png.Decode(bytes.NewReader(currentPNG))
+	if err != nil {
+		logger.warn("visual", "decode current failed", map[string]any{"error": err.Error()})
+		return ""
+	}
+	if baseImg.Bounds() != currImg.Bounds() {
+		logger.warn("visual", "baseline/current size mismatch", nil)
+		return ""
+	}
+	bounds := baseImg.Bounds()
+	diff := image.NewRGBA(bounds)
+	var changed int
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			br, bg, bb, _ := baseImg.At(x, y).RGBA()
+			cr, cg, cb, _ := currImg.At(x, y).RGBA()
+			if br != cr || bg != cg || bb != cb {
+				changed++
+				diff.Set(x, y, color.RGBA{R: 255, A: 180})
+			} else {
+				diff.Set(x, y, color.RGBA{A: 0})
+			}
+		}
+	}
+	if changed == 0 {
+		return ""
+	}
+	out := filepath.Join(artifactsDir, "visual-diff.png")
+	f, err := os.Create(out)
+	if err != nil {
+		logger.warn("visual", "write diff failed", map[string]any{"error": err.Error()})
+		return ""
+	}
+	defer f.Close()
+	if err := png.Encode(f, diff); err != nil {
+		logger.warn("visual", "encode diff failed", map[string]any{"error": err.Error()})
+		return ""
+	}
+	logger.warn("visual", "diff image generated", map[string]any{"path": out, "pixels_changed": changed})
+	return filepath.Base(out)
 }

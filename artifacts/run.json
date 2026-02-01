@@ -1,9 +1,17 @@
 {
+  "run_id": "sample",
   "started_at": "2026-01-31T18:29:47.017187-08:00",
   "finished_at": "2026-01-31T18:30:06.768622-08:00",
   "target_url": "https://en.wikipedia.org/wiki/Tampermonkey",
-  "screenshot": "artifacts/wikipedia-dark.png",
-  "video_webp": "artifacts/wikipedia-dark.webp",
+  "screenshot": "wikipedia-dark.png",
+  "video_webm": "",
+  "video_webp": "wikipedia-dark.webp",
+  "har": "",
+  "replay_har": "",
+  "visual_hash": "e28234f7ac37bbe4c6cf7f1f6fb9fad0f89b4c72d3c63bacb5b659d02d3baaca",
+  "visual_diff": false,
+  "visual_diff_img": "",
+  "network_issues": [],
   "script_meta": {
     "Name": "Wikipedia Dark/Light Mode",
     "Namespace": "http://tampermonkey.net/",
@@ -20,5 +28,8 @@
     ],
     "Raw": "// ==UserScript==\n// @name         Wikipedia Dark/Light Mode\n// @namespace    http://tampermonkey.net/\n// @version      1.8\n// @description  Toggle dark/light mode\n// @author       AnonymousUnblocker\n// @match        https://*.wikipedia.org/*\n// @grant        none\n// @downloadURL https://update.greasyfork.org/scripts/563287/Wikipedia%20DarkLight%20Mode.user.js\n// @updateURL https://update.greasyfork.org/scripts/563287/Wikipedia%20DarkLight%20Mode.meta.js\n// ==/UserScript==\n"
   },
-  "profile_folder": "/var/folders/42/m6yjrl1539d00_1nnvg9c8r80000gn/T/philadelphia-profile"
+  "profile_folder": "/tmp/philadelphia-profile-sample",
+  "engine": "Tampermonkey (init-script injection)",
+  "extension_dir": "",
+  "log_path": "runs/sample/logs/runner.ndjson"
 }

@@ -15,6 +15,8 @@
   const metaMatch = document.getElementById('meta-match');
   const metaDuration = document.getElementById('meta-duration');
   const metaProfile = document.getElementById('meta-profile');
+  const flowStepsEl = document.getElementById('flow-steps');
+  const flowJsonEl = document.getElementById('flow-json');
 
   function appendLog(scope, message) {
     const line = document.createElement('div');
@@ -104,6 +106,30 @@
   }
 
   document.getElementById('start-run').addEventListener('click', startRun);
+
+  document.getElementById('add-step').addEventListener('click', () => {
+    const step = document.createElement('div');
+    step.className = 'flow-step';
+    step.innerHTML = `
+      <input placeholder="Action (click, fill, wait)" />
+      <input placeholder="Selector or value" />
+      <input placeholder="Notes / assertion" />
+    `;
+    flowStepsEl.appendChild(step);
+    syncFlowJson();
+    step.querySelectorAll('input').forEach((input) => {
+      input.addEventListener('input', syncFlowJson);
+    });
+  });
+
+  function syncFlowJson() {
+    const steps = [];
+    flowStepsEl.querySelectorAll('.flow-step').forEach((node) => {
+      const [action, target, note] = Array.from(node.querySelectorAll('input')).map((i) => i.value);
+      if (action || target || note) steps.push({ action, target, note });
+    });
+    flowJsonEl.textContent = JSON.stringify(steps, null, 2);
+  }
 
   // bootstrap
   let backendAvailable = false;
