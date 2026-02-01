@@ -176,7 +176,10 @@
 
   // bootstrap
   let backendAvailable = false;
-  let apiBase = 'http://localhost:8787';
+  // Auto-detect API base: use current origin if served from backend, otherwise localhost
+  let apiBase = window.location.protocol === 'file:'
+    ? 'http://localhost:8787'
+    : window.location.origin;
   async function detectBackend() {
     try {
       const res = await fetch(`${apiBase}/health`, { mode: 'cors' });

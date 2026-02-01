@@ -1,107 +1,388 @@
-# Scriptwright Validation Studio — Userscript Test Lab
+# Scriptwright Validation Studio
 
-![Status](https://img.shields.io/badge/status-alpha%20v0.6.0-green) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-flow%20editor%20live-ff69b4) ![Artifacts](https://img.shields.io/badge/HAR%2FTrace-ready-blueviolet) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen) ![Notarized](https://img.shields.io/badge/macOS-notarized-blue)
+**A tool for testing userscripts with real browsers and browser extensions.**
 
-<p align="center">
-  <img src="artifacts/wikipedia-dark.webp" alt="Animated walkthrough of Wikipedia Dark/Light Mode userscript being validated" width="100%">
-</p>
+![Status](https://img.shields.io/badge/status-alpha%20v0.6-orange)
+![Go](https://img.shields.io/badge/go-1.25-blue?logo=go)
+![Playwright](https://img.shields.io/badge/playwright--go-0.5200-green?logo=playwright)
+![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple)
 
-<p align="center">
-  <img src="artifacts/webui.png" alt="UI overview: settings, embedded browser, console, flow editor, HAR/trace links" width="100%">
-</p>
-<p align="center">
-  <em>Need extensions? Grab TM MV3 and VM quickly (links below) then upload via the Extensions panel.</em>
-</p>
+---
 
-## Why this exists
-A desktop-first lab for validating real userscripts with real engines (Tampermonkey/Violentmonkey) using Playwright-Go. It mirrors the spec/roadmap in `spec.md` and `roadmap.md`: persistent Chromium context, bundled extensions, rich artifacts (logs, HAR, traces, screenshots, video), and a pro debugging console.
+## What is this?
 
-## Mac-first quickstart (Linux friendly)
-1) Install deps: `brew install ffmpeg webp podman` (or use Docker).  
-2) Build + run container (serves API + UI):  
-   ```bash
-   podman build -f Containerfile -t userscript-lab .
-   podman run --rm -p 8787:8787 -v $(pwd)/runs:/app/runs userscript-lab
-   ```
-3) Open UI: `open http://localhost:8787/ui/` (or serve `webui/` locally).  
-4) Add an extension: grab TM MV3 CRX or VM XPI (links in Extensions panel), upload it, then **Run via API**.  
-5) Artifacts land in `/runs/<id>/artifacts/` (HAR/trace/screenshot/WebP/diff when enabled).
+This tool lets you:
+1. **Load a userscript** (like one from GreasyFork)
+2. **Test it in a real browser** (Chromium via Playwright)
+3. **Get proof it works** (screenshots, videos, logs)
 
-## CLI runner (`lab`)
-- One-off run:  
-  ```bash
-  go run ./cmd/lab run \\
-    --url https://en.wikipedia.org/wiki/Tampermonkey \\
-    --script scripts/wikipedia-dark.user.js \\
-    --engine "Tampermonkey (init-script)" \\
-    --ext /path/to/tampermonkey-mv3 \\        # optional MV3 load
-    --headless=true
-  ```  
-  Outputs manifest JSON and writes artifacts under `runs/<id>/`.
-- Serve API for the web UI:  
-  ```bash
-  go run ./cmd/lab serve --port 8787
-  ```  
-  Endpoints: `POST /v1/runs` (start run), `GET /v1/runs/{id}`, `GET /v1/runs/{id}/logs`, static artifacts under `/runs/…`.
-- MV3 extension loading: pass `--ext /path/to/extension` (or env `USERSCRIPT_ENGINE_EXT_DIR`) to use `--load-extension/--disable-extensions-except`. Falls back to init-script injection when unset.
-- Visual regression starter: set `BASELINE_DIR` (or `Options.BaselineDir`) and the runner will create a baseline hash on first run and warn when the screenshot hash changes.
-- Network assertion starter: provide `BlockedHosts` (env `BLOCKED_HOSTS=host1,host2` planned) to surface blocked domains and 4xx/5xx responses in the manifest’s `network_issues`.
-- HAR: `--har` writes `network.har` for inspection; `--replay-har /path/to.har` routes traffic from an existing HAR for deterministic offline runs (best-effort).
-- Extension bundles: drop unpacked builds into `extensions/` (e.g., `extensions/tampermonkey-mv3`, `extensions/violentmonkey-firefox`) and point `--ext` or `USERSCRIPT_ENGINE_EXT_DIR` there for deterministic loading.
-- Trace: `--trace` captures `trace.zip` (screenshots + snapshots) alongside artifacts.
-- Flow steps: pass `--steps '[{"action":"click","target":"text=Toggle Dark Mode"}]'` (or build steps in the web UI) to drive Playwright actions; includes `wait`, `waitForSelector`, `fill`, `assert-text`.
-- Script ingestion: file path, paste/stdin, URL (`--script_url`) or git repo/path (`--script_git_repo`, `--script_git_path`).
-- Visual diff: `--baseline <dir>` seeds/compares and emits `visual-diff.png`; adjust threshold via `--visual_threshold` (0–255). Manifests include pixel counts/ratio.
-- Notarized CLI: `dist/lab-macos.zip` (built & notarized locally via notarytool with Developer ID + hardened runtime).
-- Extensions: UI upload supports CRX/XPI; or download manually (TM MV3 CRX link; VM from https://violentmonkey.github.io/get-it/) and unzip to `extensions/`, then run with `--ext extensions/tampermonkey-mv3` or load VM in Firefox profile.
-- Apple container quickstart: see `apple-container.md` for podman + apple/container steps (build, mount extensions, run API, open local UI).
+Think of it as automated QA for userscripts.
 
-## Web UI prototype (manual + future automated)
-<p align="center">
-  <img src="artifacts/webui.png" alt="Web UI prototype with settings, embedded browser, and console" width="100%">
-</p>
+---
 
-- Launch locally:  
-  - Open `webui/index.html` directly, or serve the repo root: `python -m http.server 8000` then visit `http://localhost:8000/webui/`.  
-  - (Optional) start the API: `go run ./cmd/lab serve --port 8787`. The UI will auto-detect it and use **Run via API**; otherwise it falls back to simulation.  
-  - Click **Load Sample Artifacts** to hydrate the console and preview with the latest demo run.  
-  - Use **Open Browser Pane** to point the embedded iframe at any URL and tweak engine/headless toggles (console shows the simulated flow).  
-- Flow editor stub: add steps (action/selector/note) to build a JSON step list; **Run via API** will send these to the runner now.
-- HAR/Trace links render in the artifact panel when returned by the API.
-- New settings: script URL, git repo/path, baseline dir, blocked hosts, visual threshold slider (persisted).
-- Capture an updated UI screenshot for docs: `go run ./cmd/capture_ui` (writes `artifacts/webui.png`).
+## Quick Start
 
-## Container / Podman
-- Build (podman or docker): `podman build -t userscript-lab -f Containerfile .`
-- Run API server: `podman run --rm -p 8787:8787 -v $(pwd)/runs:/app/runs userscript-lab`
-- Images are distroless-based for minimal attack surface. Works with `podman` and apple/container runtimes.
+### Option 1: Run Locally
 
-## How the demo works
-- **Persistent Chromium**: launches via Playwright with video recording enabled for all pages.  
-- **Userscript ingestion**: `internal/userscript` parses the `// ==UserScript==` block (name, namespace, version, match, grants, raw).  
-- **Injection strategy**: the userscript is executed after navigation to `https://en.wikipedia.org/wiki/Tampermonkey`, then the “Toggle Dark Mode” UI is exercised.  
-- **Artifacts**: video captured as WebM → converted to WebP for README; PNG screenshot for baseline/visual assertions; manifest captures timing + profile location for debugging.  
-- **Resilience**: video conversion first tries `ffmpeg` with `libwebp` and falls back to `img2webp` frame assembly so the demo succeeds on typical macOS setups.
+```bash
+# Install dependencies (macOS)
+brew install ffmpeg webp podman
 
-## Files to know
-- `cmd/demo/main.go` — minimal end-to-end runner with capture + conversion.
-- `cmd/capture_ui/main.go` — grabs a fresh screenshot of the web UI shell.
-- `internal/userscript/parser.go` — metadata parser with unit test.
-- `webui/` — static prototype UI with settings, browser pane, console, and artifact previews.
-- `scripts/wikipedia-dark.user.js` — sample GreasyFork script (v1.8) used by the demo.
-- `artifacts/` — generated showcase assets that feed the README hero + UI preview.
+# Build the container
+podman build -f Containerfile -t userscript-lab .
 
-## Extending toward the roadmap
-- Swap the target URL or script path to exercise other userscripts (e.g., different matches or grant sets).  
-- Wire checklist assertions: use Playwright expect-style checks after the toggle to move toward the acceptance criteria in `spec.md`.  
-- Add HAR/trace hooks (per spec §6/§9) by enabling Playwright tracing and HAR recording on the context.  
-- Integrate TM/VM extension loading by replacing the current init-script injection with a real extension install once the bundled MV3 artifacts are available.  
-- Surface artifacts in a React/TS UI matching the “Run dashboard” and “Debug console” requirements.
+# Run it
+podman run --rm -p 8787:8787 -v $(pwd)/runs:/app/runs userscript-lab
 
-## Running tests
+# Open the UI
+open http://localhost:8787/ui/
+```
+
+### Option 2: Deploy to Server
+
+```bash
+# Deploy to remote server
+./deploy.sh
+
+# Access it
+# Direct: http://scriptwright:8787/ui/
+# Or via SSH tunnel: ssh -i ~/.ssh/scriptwright -L 8787:localhost:8787 alfa@scriptwright
+```
+
+---
+
+## How It Works
+
+### Architecture
+
+```
+┌──────────────┐
+│   Web UI     │  ← You interact here
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Go Server   │  ← API server (port 8787)
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Playwright  │  ← Launches Chromium, runs scripts
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Artifacts   │  ← Saves screenshots, videos, logs
+└──────────────┘
+```
+
+### What Gets Generated
+
+When you run a test, you get:
+- **Screenshot** (PNG)
+- **Video** (WebP format)
+- **Logs** (structured JSON)
+- **Manifest** (JSON summary of the run)
+- *Optional:* HAR file (network traffic), Trace file (debugging)
+
+All saved in: `runs/{run-id}/artifacts/`
+
+---
+
+## Usage
+
+### Web UI (Easiest)
+
+1. Open http://localhost:8787/ui/
+2. Fill in:
+   - **Target URL:** The website to test on
+   - **Script:** Path, URL, or Git repo of your userscript
+   - **Engine:** How to run it (Init Script or Tampermonkey)
+3. Click **Run via API**
+4. View results (screenshot, logs, artifacts)
+
+### CLI (Advanced)
+
+```bash
+# Run a single test
+go run ./cmd/lab run \
+  --url https://en.wikipedia.org/wiki/Tampermonkey \
+  --script scripts/wikipedia-dark.user.js \
+  --headless=true
+
+# Start the API server
+go run ./cmd/lab serve --port 8787
+
+# List previous runs
+go run ./cmd/lab list
+```
+
+### API (Programmatic)
+
+```bash
+# Health check
+curl http://localhost:8787/health
+
+# Create a run
+curl -X POST http://localhost:8787/v1/runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "script": "path/to/script.user.js",
+    "engine": "Tampermonkey (init-script)",
+    "headless": true
+  }'
+
+# Get run results
+curl http://localhost:8787/v1/runs/{run-id}
+```
+
+---
+
+## Features
+
+### ✅ What Works
+
+- **Script Loading:** From file, URL, or Git repo
+- **Browser Automation:** Chromium via Playwright-Go
+- **Screenshot Capture:** Full-page PNG
+- **Video Recording:** WebM → WebP conversion
+- **Logging:** Structured NDJSON logs
+- **Visual Regression:** Hash-based baseline comparison with pixel diff
+- **Network Assertions:** Check for blocked hosts, status codes
+- **Flow Testing:** Click, fill, wait, assert (DOM actions)
+- **HAR Recording:** Capture network traffic
+- **Trace Recording:** Playwright trace files
+- **Web UI:** Settings, console, artifact preview
+- **Deployment:** Container + systemd service
+
+### 🟡 Partially Working
+
+- **Tampermonkey Loading:** Attempts to load extension (requires manual setup)
+- **Violentmonkey:** Not automated
+- **Trace Capture:** Some timing bugs
+- **HAR Replay:** Basic support, minimal error handling
+
+### ❌ Not Built Yet
+
+- React/TypeScript UI (current: vanilla JS)
+- Project/suite persistence (current: single runs)
+- Real-time log streaming (current: static files)
+- Embedded trace/HAR viewers
+- CI/CD integration
+- Retry logic
+- Performance metrics
+
+---
+
+## Project Structure
+
+```
+philadelphia/
+├── cmd/
+│   ├── lab/         # Main CLI (run, serve, list)
+│   ├── demo/        # Demo runner (generates artifacts)
+│   └── capture_ui/  # UI screenshot utility
+├── internal/
+│   ├── runner/      # Core Playwright orchestration
+│   └── userscript/  # Userscript metadata parser
+├── webui/           # Web UI (HTML/CSS/JS)
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── scripts/         # Example userscripts
+├── runs/            # Generated test runs (gitignored)
+├── Containerfile    # Container build
+├── deploy.sh        # Remote deployment script
+└── userscript-lab.service  # Systemd service
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Extension directory
+export USERSCRIPT_ENGINE_EXT_DIR=/path/to/extensions
+
+# Visual regression baseline
+export BASELINE_DIR=/path/to/baselines
+
+# Blocked hosts (comma-separated)
+export BLOCKED_HOSTS=ads.example.com,tracker.com
+```
+
+### CLI Flags
+
+```bash
+# Run command
+--url          Target URL
+--script       Script path/URL/git repo
+--engine       Engine type (default: "Tampermonkey (init-script)")
+--ext          Extension directory
+--headless     Headless mode (default: true)
+--trace        Capture trace (default: false)
+--har          Capture HAR (default: false)
+--baseline     Baseline directory for visual diff
+--steps        JSON flow steps
+
+# Serve command
+--port         Port to listen on (default: 8787)
+```
+
+---
+
+## Deployment
+
+### Server Requirements
+
+- OS: AlmaLinux / RHEL / Debian / Ubuntu
+- Podman or Docker
+- Firewall: Open port 8787
+- Optional: Systemd for service management
+
+### Current Production Deployment
+
+**Server:** `scriptwright.alpina` (alfa@scriptwright)
+**URL:** http://scriptwright:8787/ui/
+**Service:** systemd (userscript-lab.service)
+**Status:** ✅ Running
+
+```bash
+# Check status
+ssh -i ~/.ssh/scriptwright alfa@scriptwright "sudo systemctl status userscript-lab"
+
+# View logs
+ssh -i ~/.ssh/scriptwright alfa@scriptwright "sudo journalctl -u userscript-lab -f"
+
+# Restart
+ssh -i ~/.ssh/scriptwright alfa@scriptwright "sudo systemctl restart userscript-lab"
+```
+
+---
+
+## Development
+
+### Run Tests
+
 ```bash
 go test ./...
 ```
 
+### Build Binary
+
+```bash
+go build -o lab ./cmd/lab
+./lab serve
+```
+
+### Build Container
+
+```bash
+podman build -f Containerfile -t userscript-lab .
+podman run --rm -p 8787:8787 userscript-lab
+```
+
+---
+
+## Examples
+
+### Test a Wikipedia Dark Mode Script
+
+```bash
+go run ./cmd/lab run \
+  --url https://en.wikipedia.org/wiki/Tampermonkey \
+  --script scripts/wikipedia-dark.user.js \
+  --headless=true
+```
+
+### Test with Visual Regression
+
+```bash
+# First run (creates baseline)
+go run ./cmd/lab run --url https://example.com --script test.user.js --baseline ./baselines
+
+# Second run (compares to baseline)
+go run ./cmd/lab run --url https://example.com --script test.user.js --baseline ./baselines
+# Output: visual_diff_img if pixels changed
+```
+
+### Test with Flow Steps
+
+```bash
+go run ./cmd/lab run \
+  --url https://example.com \
+  --script test.user.js \
+  --steps '[
+    {"action":"click","target":"text=Accept Cookies"},
+    {"action":"wait","target":"1000"},
+    {"action":"assert-text","target":"Welcome"}
+  ]'
+```
+
+---
+
+## Troubleshooting
+
+### "podman: command not found"
+
+Install podman:
+```bash
+# macOS
+brew install podman
+
+# AlmaLinux/RHEL
+sudo dnf install -y podman
+```
+
+### "Port 8787 already in use"
+
+Change the port:
+```bash
+go run ./cmd/lab serve --port 9000
+```
+
+### "Playwright browser not found"
+
+The container includes Playwright. If running locally without container:
+```bash
+go run github.com/playwright-community/playwright-go/cmd/playwright@v0.5200.1 install
+```
+
+### "Extension not loading"
+
+Extensions require manual setup. Download:
+- Tampermonkey MV3: https://clients2.google.com/service/update2/crx?response=redirect&prodversion=137&x=id%3Ddhdgffkkebhmkfjojejmpbldmpobfkfo%26installsource%3Dondemand%26uc
+- Violentmonkey: https://violentmonkey.github.io/get-it/
+
+Unzip to `extensions/` directory.
+
+---
+
+## What's Next?
+
+See [NEXT.md](./NEXT.md) for the roadmap and next steps.
+
+See [container.md](./container.md) for deployment details.
+
+---
+
 ## License
-Blue Oak Model License 1.0.0 — see `LICENSE`.
+
+Blue Oak Model License 1.0.0 — See [LICENSE](./LICENSE)
+
+---
+
+## Contributing
+
+This is an alpha project. Contributions welcome but expect breaking changes.
+
+**Current Status:** 45% complete
+- ✅ Core runner works
+- ✅ Basic UI works
+- 🟡 Extension loading needs work
+- ❌ Advanced features (React UI, persistence, CI) not built
+
+See [roadmap.md](./roadmap.md) for full feature status.
