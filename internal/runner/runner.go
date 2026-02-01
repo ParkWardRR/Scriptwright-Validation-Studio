@@ -10,6 +10,8 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +29,7 @@ type Options struct {
 	TargetURL           string
 	ScriptPath          string // optional if ScriptContent set
 	ScriptContent       string
+	ScriptURL           string // optional remote fetch
 	ExtensionDir        string // optional: path to unpacked MV3 extension (e.g., Tampermonkey)
 	Engine              string // display only for now
 	Headless            bool
@@ -101,8 +104,8 @@ func Run(opts Options) (Result, error) {
 		cwd, _ := os.Getwd()
 		opts.Workspace = cwd
 	}
-	if opts.ScriptPath == "" && opts.ScriptContent == "" {
-		return Result{}, errors.New("either ScriptPath or ScriptContent must be provided")
+	if opts.ScriptPath == "" && opts.ScriptContent == "" && opts.ScriptURL == "" {
+		return Result{}, errors.New("either ScriptPath, ScriptContent, or ScriptURL must be provided")
 	}
 	if opts.ScriptPath == "" && opts.ScriptContent != "" {
 		tmp, err := os.CreateTemp("", "userscript-*.user.js")
@@ -114,6 +117,13 @@ func Run(opts Options) (Result, error) {
 		}
 		tmp.Close()
 		opts.ScriptPath = tmp.Name()
+	}
+	if opts.ScriptPath == "" && opts.ScriptURL != "" {
+		tmp, err := fetchScript(opts.ScriptURL)
+		if err != nil {
+			return Result{}, fmt.Errorf("fetch script: %w", err)
+		}
+		opts.ScriptPath = tmp
 	}
 
 	runID := fmt.Sprintf("%x", time.Now().UnixNano())
@@ -680,4 +690,28 @@ func executeSteps(page playwright.Page, steps []Step, logger *ndjsonLogger) {
 			logger.warn(scope, "unknown action", map[string]any{"action": step.Action})
 		}
 	}
+}
+
+func fetchScript(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("bad status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp("", "userscript-url-*.user.js")
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return "", err
+	}
+	tmp.Close()
+	return tmp.Name(), nil
 }
