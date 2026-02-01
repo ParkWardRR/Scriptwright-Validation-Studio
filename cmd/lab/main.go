@@ -183,8 +183,8 @@ func (s *server) routes() http.Handler {
 	runsDir := filepath.Join(s.workspace, "runs")
 	mux.Handle("/runs/", http.StripPrefix("/runs/", http.FileServer(http.Dir(runsDir))))
 
-	// serve web UI
-	uiDir := filepath.Join(s.workspace, "webui")
+	// serve web UI (React app)
+	uiDir := filepath.Join(s.workspace, "dist")
 	mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir(uiDir))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/", http.StatusFound)
