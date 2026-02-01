@@ -5,6 +5,7 @@
   const engineInput = document.getElementById('engine');
   const captureTrace = document.getElementById('capture-trace');
   const captureHar = document.getElementById('capture-har');
+  const replayHar = document.getElementById('replay-har');
   const chipUrl = document.getElementById('chip-url');
   const chipEngine = document.getElementById('chip-engine');
   const screenshot = document.getElementById('screenshot');
@@ -73,8 +74,9 @@
       extension_dir: '',
       headless: document.getElementById('headless').value === 'true',
       har: captureHar.checked,
-      replay_har: document.getElementById('replay-har').value.trim(),
-      baseline: '',
+      replay_har: replayHar.value.trim(),
+      baseline: localStorage.getItem('baselineDir') || '',
+      blocked_hosts: (localStorage.getItem('blockedHosts') || '').split(',').map(s => s.trim()).filter(Boolean),
       steps,
     };
     try {
@@ -170,4 +172,12 @@
   appendLog('ui', 'Web UI ready. Load sample artifacts or launch a page.');
   detectBackend();
   if (window.sampleRun) loadSample();
+
+  // Persist settings
+  captureTrace.checked = localStorage.getItem('captureTrace') !== 'false';
+  captureHar.checked = localStorage.getItem('captureHar') === 'true';
+  replayHar.value = localStorage.getItem('replayHar') || '';
+  document.getElementById('capture-trace').addEventListener('change', e => localStorage.setItem('captureTrace', e.target.checked));
+  document.getElementById('capture-har').addEventListener('change', e => localStorage.setItem('captureHar', e.target.checked));
+  replayHar.addEventListener('input', e => localStorage.setItem('replayHar', e.target.value));
 })();

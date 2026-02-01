@@ -1,9 +1,13 @@
 # Scriptwright Validation Studio — Userscript Test Lab
 
-![Status](https://img.shields.io/badge/status-spike%20demo-blue) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-prototype-ff69b4) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen)
+![Status](https://img.shields.io/badge/status-alpha%20v0.5.0-green) ![Language](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go) ![Automation](https://img.shields.io/badge/Playwright-Go%200.5200.1-2EAD33?logo=playwright) ![Browser](https://img.shields.io/badge/chromium-persistent%20profile-lightgrey?logo=google-chrome) ![UI](https://img.shields.io/badge/web%20UI-flow%20editor%20live-ff69b4) ![License](https://img.shields.io/badge/license-Blue%20Oak%201.0.0-purple) ![Coverage](https://img.shields.io/badge/tests-go%20test-brightgreen)
 
 <p align="center">
   <img src="artifacts/wikipedia-dark.webp" alt="Animated walkthrough of Wikipedia Dark/Light Mode userscript being validated" width="100%">
+</p>
+
+<p align="center">
+  <img src="artifacts/webui.png" alt="UI overview: settings, embedded browser, console, flow editor, HAR/trace links" width="100%">
 </p>
 
 ## Why this exists
@@ -40,6 +44,8 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - Extension bundles: drop unpacked builds into `extensions/` (e.g., `extensions/tampermonkey-mv3`, `extensions/violentmonkey-firefox`) and point `--ext` or `USERSCRIPT_ENGINE_EXT_DIR` there for deterministic loading.
 - Trace: `--trace` captures `trace.zip` (screenshots + snapshots) alongside artifacts.
 - Flow steps: pass `--steps '[{"action":"click","target":"text=Toggle Dark Mode"}]'` (or build steps in the web UI) to drive Playwright actions; includes basic `wait`, `waitForSelector`, `fill`, and `assert-text`.
+- Script ingestion (paste): use `--script -` and pipe content, or `--script <path>` for files. API accepts `script_content` too.
+- Visual diff: `--baseline <dir>` seeds/compares and emits `visual-diff.png`; adjust threshold via `VISUAL_DIFF_THRESHOLD` env later (code supports `Options.VisualDiffThreshold`).
 
 ## Web UI prototype (manual + future automated)
 <p align="center">
@@ -54,6 +60,11 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - Flow editor stub: add steps (action/selector/note) to build a JSON step list; **Run via API** will send these to the runner now.
 - HAR/Trace links render in the artifact panel when returned by the API.
 - Capture an updated UI screenshot for docs: `go run ./cmd/capture_ui` (writes `artifacts/webui.png`).
+
+## Container / Podman
+- Build (podman or docker): `podman build -t userscript-lab -f Containerfile .`
+- Run API server: `podman run --rm -p 8787:8787 -v $(pwd)/runs:/app/runs userscript-lab`
+- Images are distroless-based for minimal attack surface. Works with `podman` and apple/container runtimes.
 
 ## How the demo works
 - **Persistent Chromium**: launches via Playwright with video recording enabled for all pages.  

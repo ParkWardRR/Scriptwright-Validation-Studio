@@ -24,19 +24,21 @@ import (
 
 // Options configure a run.
 type Options struct {
-	TargetURL    string
-	ScriptPath   string
-	ExtensionDir string // optional: path to unpacked MV3 extension (e.g., Tampermonkey)
-	Engine       string // display only for now
-	Headless     bool
-	ProfileDir   string // optional persistent profile location
-	CaptureTrace bool
-	CaptureHAR   bool
-	ReplayHAR    string   // optional path to HAR for replay
-	BaselineDir  string   // for visual regression hashes
-	BlockedHosts []string // basic network assertion
-	Steps        []Step   // flow actions/assertions
-	Workspace    string   // base path; defaults to cwd
+	TargetURL           string
+	ScriptPath          string // optional if ScriptContent set
+	ScriptContent       string
+	ExtensionDir        string // optional: path to unpacked MV3 extension (e.g., Tampermonkey)
+	Engine              string // display only for now
+	Headless            bool
+	ProfileDir          string // optional persistent profile location
+	CaptureTrace        bool
+	CaptureHAR          bool
+	ReplayHAR           string   // optional path to HAR for replay
+	BaselineDir         string   // for visual regression hashes
+	VisualDiffThreshold float64  // per-channel threshold 0-255
+	BlockedHosts        []string // basic network assertion
+	Steps               []Step   // flow actions/assertions
+	Workspace           string   // base path; defaults to cwd
 }
 
 // Step represents a simple flow action or assertion.
@@ -64,25 +66,27 @@ type Result struct {
 
 // Manifest is persisted to run.json.
 type Manifest struct {
-	RunID         string          `json:"run_id"`
-	StartedAt     time.Time       `json:"started_at"`
-	FinishedAt    time.Time       `json:"finished_at"`
-	TargetURL     string          `json:"target_url"`
-	Screenshot    string          `json:"screenshot"`
-	VideoWebM     string          `json:"video_webm,omitempty"`
-	VideoWebP     string          `json:"video_webp,omitempty"`
-	TraceZip      string          `json:"trace_zip,omitempty"`
-	HAR           string          `json:"har,omitempty"`
-	ReplayHAR     string          `json:"replay_har,omitempty"`
-	ScriptMeta    userscript.Meta `json:"script_meta"`
-	ProfileFolder string          `json:"profile_folder"`
-	Engine        string          `json:"engine"`
-	ExtensionDir  string          `json:"extension_dir,omitempty"`
-	LogPath       string          `json:"log_path"`
-	VisualHash    string          `json:"visual_hash,omitempty"`
-	VisualDiff    bool            `json:"visual_diff,omitempty"`
-	VisualDiffImg string          `json:"visual_diff_img,omitempty"`
-	NetworkIssues []string        `json:"network_issues,omitempty"`
+	RunID            string          `json:"run_id"`
+	StartedAt        time.Time       `json:"started_at"`
+	FinishedAt       time.Time       `json:"finished_at"`
+	TargetURL        string          `json:"target_url"`
+	Screenshot       string          `json:"screenshot"`
+	VideoWebM        string          `json:"video_webm,omitempty"`
+	VideoWebP        string          `json:"video_webp,omitempty"`
+	TraceZip         string          `json:"trace_zip,omitempty"`
+	HAR              string          `json:"har,omitempty"`
+	ReplayHAR        string          `json:"replay_har,omitempty"`
+	ScriptMeta       userscript.Meta `json:"script_meta"`
+	ProfileFolder    string          `json:"profile_folder"`
+	Engine           string          `json:"engine"`
+	ExtensionDir     string          `json:"extension_dir,omitempty"`
+	LogPath          string          `json:"log_path"`
+	VisualHash       string          `json:"visual_hash,omitempty"`
+	VisualDiff       bool            `json:"visual_diff,omitempty"`
+	VisualDiffImg    string          `json:"visual_diff_img,omitempty"`
+	VisualDiffPixels int             `json:"visual_diff_pixels,omitempty"`
+	VisualDiffRatio  float64         `json:"visual_diff_ratio,omitempty"`
+	NetworkIssues    []string        `json:"network_issues,omitempty"`
 }
 
 // Run executes a single userscript against a URL and produces artifacts.
@@ -96,6 +100,20 @@ func Run(opts Options) (Result, error) {
 	if opts.Workspace == "" {
 		cwd, _ := os.Getwd()
 		opts.Workspace = cwd
+	}
+	if opts.ScriptPath == "" && opts.ScriptContent == "" {
+		return Result{}, errors.New("either ScriptPath or ScriptContent must be provided")
+	}
+	if opts.ScriptPath == "" && opts.ScriptContent != "" {
+		tmp, err := os.CreateTemp("", "userscript-*.user.js")
+		if err != nil {
+			return Result{}, err
+		}
+		if _, err := tmp.WriteString(opts.ScriptContent); err != nil {
+			return Result{}, err
+		}
+		tmp.Close()
+		opts.ScriptPath = tmp.Name()
 	}
 
 	runID := fmt.Sprintf("%x", time.Now().UnixNano())
@@ -238,7 +256,7 @@ func Run(opts Options) (Result, error) {
 		logger.warn("artifact", "screenshot failed", map[string]any{"error": err.Error()})
 	}
 
-	visualHash, visualDiff, visualDiffImg := computeVisualHash(screenshotPath, opts, artifactsDir, logger)
+	visualHash, visualDiff, visualDiffImg, visualDiffPixels, visualDiffRatio := computeVisualHash(screenshotPath, opts, artifactsDir, logger)
 
 	video := page.Video()
 	if err := page.Close(); err != nil {
@@ -285,25 +303,27 @@ func Run(opts Options) (Result, error) {
 	}
 
 	manifest := Manifest{
-		RunID:         runID,
-		StartedAt:     start,
-		FinishedAt:    time.Now(),
-		TargetURL:     opts.TargetURL,
-		Screenshot:    filepath.Base(screenshotPath),
-		VisualHash:    visualHash,
-		VisualDiff:    visualDiff,
-		VisualDiffImg: visualDiffImg,
-		VideoWebM:     filepath.Base(videoPath),
-		VideoWebP:     filepath.Base(webpPath),
-		TraceZip:      traceNameIfExists(artifactsDir),
-		HAR:           harNameIfExists(artifactsDir),
-		ReplayHAR:     opts.ReplayHAR,
-		ScriptMeta:    scriptMeta,
-		ProfileFolder: profileDir,
-		Engine:        opts.Engine,
-		ExtensionDir:  opts.ExtensionDir,
-		LogPath:       logPath,
-		NetworkIssues: summarizeNetwork(responses, opts.BlockedHosts, logger),
+		RunID:            runID,
+		StartedAt:        start,
+		FinishedAt:       time.Now(),
+		TargetURL:        opts.TargetURL,
+		Screenshot:       filepath.Base(screenshotPath),
+		VisualHash:       visualHash,
+		VisualDiff:       visualDiff,
+		VisualDiffImg:    visualDiffImg,
+		VisualDiffPixels: visualDiffPixels,
+		VisualDiffRatio:  visualDiffRatio,
+		VideoWebM:        filepath.Base(videoPath),
+		VideoWebP:        filepath.Base(webpPath),
+		TraceZip:         traceNameIfExists(artifactsDir),
+		HAR:              harNameIfExists(artifactsDir),
+		ReplayHAR:        opts.ReplayHAR,
+		ScriptMeta:       scriptMeta,
+		ProfileFolder:    profileDir,
+		Engine:           opts.Engine,
+		ExtensionDir:     opts.ExtensionDir,
+		LogPath:          logPath,
+		NetworkIssues:    summarizeNetwork(responses, opts.BlockedHosts, logger),
 	}
 
 	manifestPath := filepath.Join(runDir, "run.json")
@@ -459,41 +479,104 @@ func DiscoverExtensionDir() string {
 }
 
 // computeVisualHash creates a SHA256 of the screenshot and compares to any baseline.
-func computeVisualHash(screenshotPath string, opts Options, artifactsDir string, logger *ndjsonLogger) (hash string, diff bool, diffImg string) {
+func computeVisualHash(screenshotPath string, opts Options, artifactsDir string, logger *ndjsonLogger) (hash string, diff bool, diffImg string, diffPixels int, diffRatio float64) {
 	data, err := os.ReadFile(screenshotPath)
 	if err != nil || len(data) == 0 {
-		return "", false, ""
+		return "", false, "", 0, 0
 	}
 	sum := fmt.Sprintf("%x", sha256.Sum256(data))
 	hash = sum
 	if opts.BaselineDir == "" {
-		return hash, false, ""
+		return hash, false, "", 0, 0
 	}
 	if err := os.MkdirAll(opts.BaselineDir, 0o755); err != nil {
 		logger.warn("visual", "baseline dir create failed", map[string]any{"error": err.Error()})
-		return hash, false, ""
+		return hash, false, "", 0, 0
 	}
 	basePath := filepath.Join(opts.BaselineDir, "screenshot.png")
 	if _, err := os.Stat(basePath); err != nil {
 		_ = os.WriteFile(basePath, data, 0o644)
 		logger.info("visual", "baseline created", map[string]any{"path": basePath})
-		return hash, false, ""
+		return hash, false, "", 0, 0
 	}
 	baseData, err := os.ReadFile(basePath)
 	if err != nil {
 		logger.warn("visual", "baseline read failed", map[string]any{"error": err.Error()})
-		return hash, false, ""
+		return hash, false, "", 0, 0
 	}
 	baseHash := fmt.Sprintf("%x", sha256.Sum256(baseData))
 	if baseHash != hash {
 		logger.warn("visual", "screenshot hash mismatch vs baseline", map[string]any{"baseline": baseHash, "current": hash})
-		diffImg = computeDiffImage(baseData, data, artifactsDir, logger)
-		return hash, true, diffImg
+		diffImg, diffPixels, diffRatio = computeDiffImage(baseData, data, artifactsDir, logger, opts.VisualDiffThreshold)
+		return hash, true, diffImg, diffPixels, diffRatio
 	}
 	logger.info("visual", "screenshot matches baseline", nil)
-	return hash, false, ""
+	return hash, false, "", 0, 0
 }
 
+// computeDiffImage generates a simple diff heatmap (red overlay) when sizes match.
+func computeDiffImage(basePNG, currentPNG []byte, artifactsDir string, logger *ndjsonLogger, threshold float64) (string, int, float64) {
+	baseImg, err := png.Decode(bytes.NewReader(basePNG))
+	if err != nil {
+		logger.warn("visual", "decode baseline failed", map[string]any{"error": err.Error()})
+		return "", 0, 0
+	}
+	currImg, err := png.Decode(bytes.NewReader(currentPNG))
+	if err != nil {
+		logger.warn("visual", "decode current failed", map[string]any{"error": err.Error()})
+		return "", 0, 0
+	}
+	if baseImg.Bounds() != currImg.Bounds() {
+		logger.warn("visual", "baseline/current size mismatch", nil)
+		return "", 0, 0
+	}
+	bounds := baseImg.Bounds()
+	diff := image.NewRGBA(bounds)
+	var changed int
+	total := (bounds.Max.X - bounds.Min.X) * (bounds.Max.Y - bounds.Min.Y)
+	thr := threshold
+	if thr < 0 {
+		thr = 0
+	}
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			br, bg, bb, _ := baseImg.At(x, y).RGBA()
+			cr, cg, cb, _ := currImg.At(x, y).RGBA()
+			dr := absDiff(br, cr)
+			dg := absDiff(bg, cg)
+			db := absDiff(bb, cb)
+			if float64(dr) > thr || float64(dg) > thr || float64(db) > thr {
+				changed++
+				diff.Set(x, y, color.RGBA{R: 255, A: 180})
+			} else {
+				diff.Set(x, y, color.RGBA{A: 0})
+			}
+		}
+	}
+	if changed == 0 {
+		return "", 0, 0
+	}
+	out := filepath.Join(artifactsDir, "visual-diff.png")
+	f, err := os.Create(out)
+	if err != nil {
+		logger.warn("visual", "write diff failed", map[string]any{"error": err.Error()})
+		return "", changed, float64(changed) / float64(total)
+	}
+	defer f.Close()
+	if err := png.Encode(f, diff); err != nil {
+		logger.warn("visual", "encode diff failed", map[string]any{"error": err.Error()})
+		return "", changed, float64(changed) / float64(total)
+	}
+	logger.warn("visual", "diff image generated", map[string]any{"path": out, "pixels_changed": changed})
+	return filepath.Base(out), changed, float64(changed) / float64(total)
+}
+
+func absDiff(a, b uint32) uint32 {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}
 func harNameIfExists(artifactsDir string) string {
 	har := filepath.Join(artifactsDir, "network.har")
 	if _, err := os.Stat(har); err == nil {
@@ -597,53 +680,4 @@ func executeSteps(page playwright.Page, steps []Step, logger *ndjsonLogger) {
 			logger.warn(scope, "unknown action", map[string]any{"action": step.Action})
 		}
 	}
-}
-
-// computeDiffImage generates a simple diff heatmap (red overlay) when sizes match.
-func computeDiffImage(basePNG, currentPNG []byte, artifactsDir string, logger *ndjsonLogger) string {
-	baseImg, err := png.Decode(bytes.NewReader(basePNG))
-	if err != nil {
-		logger.warn("visual", "decode baseline failed", map[string]any{"error": err.Error()})
-		return ""
-	}
-	currImg, err := png.Decode(bytes.NewReader(currentPNG))
-	if err != nil {
-		logger.warn("visual", "decode current failed", map[string]any{"error": err.Error()})
-		return ""
-	}
-	if baseImg.Bounds() != currImg.Bounds() {
-		logger.warn("visual", "baseline/current size mismatch", nil)
-		return ""
-	}
-	bounds := baseImg.Bounds()
-	diff := image.NewRGBA(bounds)
-	var changed int
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			br, bg, bb, _ := baseImg.At(x, y).RGBA()
-			cr, cg, cb, _ := currImg.At(x, y).RGBA()
-			if br != cr || bg != cg || bb != cb {
-				changed++
-				diff.Set(x, y, color.RGBA{R: 255, A: 180})
-			} else {
-				diff.Set(x, y, color.RGBA{A: 0})
-			}
-		}
-	}
-	if changed == 0 {
-		return ""
-	}
-	out := filepath.Join(artifactsDir, "visual-diff.png")
-	f, err := os.Create(out)
-	if err != nil {
-		logger.warn("visual", "write diff failed", map[string]any{"error": err.Error()})
-		return ""
-	}
-	defer f.Close()
-	if err := png.Encode(f, diff); err != nil {
-		logger.warn("visual", "encode diff failed", map[string]any{"error": err.Error()})
-		return ""
-	}
-	logger.warn("visual", "diff image generated", map[string]any{"path": out, "pixels_changed": changed})
-	return filepath.Base(out)
 }
