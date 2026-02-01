@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Userscript Test Lab — Web UI</title>
+  <link rel="stylesheet" href="style.css" />
+  <script defer src="sample-run.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Scriptwright Validation Studio</p>
+      <h1>Manual + automated userscript validation</h1>
+      <p class="subhead">Switch engines, launch a browser pane, stream console output, and browse artifacts from your latest run.</p>
+      <div class="pill-row">
+        <span class="pill">Playwright-Go</span>
+        <span class="pill">Chromium persistent profile</span>
+        <span class="pill">Tampermonkey / Violentmonkey</span>
+        <span class="pill">HAR + Trace ready</span>
+      </div>
+    </div>
+    <div class="hero-media">
+      <img src="../artifacts/wikipedia-dark.webp" alt="Animated userscript run" />
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button id="simulate-run" class="primary">Simulate Run</button>
+      </div>
+      <label>Target URL <input id="target-url" type="text" value="https://en.wikipedia.org/wiki/Tampermonkey" /></label>
+      <label>Userscript <input id="script-path" type="text" value="scripts/wikipedia-dark.user.js" /></label>
+      <label>Engine
+        <select id="engine">
+          <option>Tampermonkey (MV3)</option>
+          <option>Violentmonkey (Firefox)</option>
+        </select>
+      </label>
+      <label>Headless
+        <select id="headless">
+          <option value="true">Headless</option>
+          <option value="false">Headed</option>
+        </select>
+      </label>
+      <label class="row">
+        <input type="checkbox" id="capture-trace" checked /> Trace.zip
+      </label>
+      <label class="row">
+        <input type="checkbox" id="capture-har" /> HAR
+      </label>
+      <div class="actions">
+        <button id="launch" class="ghost">Open Browser Pane</button>
+        <button id="load-artifacts" class="ghost">Load Sample Artifacts</button>
+      </div>
+    </section>
+
+    <section class="panel browser">
+      <div class="panel-head">
+        <h2>Browser Pane</h2>
+        <div class="chips">
+          <span class="chip" id="chip-url">https://en.wikipedia.org/wiki/Tampermonkey</span>
+          <span class="chip" id="chip-engine">Tampermonkey (MV3)</span>
+        </div>
+      </div>
+      <iframe id="preview" src="https://en.wikipedia.org/wiki/Tampermonkey" sandbox="allow-same-origin allow-scripts allow-forms" loading="lazy"></iframe>
+      <div class="artifact-preview">
+        <div>
+          <p class="label">Latest screenshot</p>
+          <img id="screenshot" src="../artifacts/wikipedia-dark.png" alt="Screenshot" />
+        </div>
+        <div>
+          <p class="label">WebP run video</p>
+          <img id="webp" src="../artifacts/wikipedia-dark.webp" alt="Animated WebP" />
+        </div>
+      </div>
+    </section>
+
+    <section class="panel console">
+      <div class="panel-head">
+        <h2>Console & Logs</h2>
+        <div class="chips">
+          <span class="chip">run_id: sample</span>
+          <span class="chip">page: main</span>
+        </div>
+      </div>
+      <div id="console-stream" class="console-stream"></div>
+      <div class="manifest">
+        <div>
+          <p class="label">Script</p>
+          <p id="meta-name">–</p>
+        </div>
+        <div>
+          <p class="label">Match</p>
+          <p id="meta-match">–</p>
+        </div>
+        <div>
+          <p class="label">Run duration</p>
+          <p id="meta-duration">–</p>
+        </div>
+        <div>
+          <p class="label">Profile</p>
+          <p id="meta-profile">–</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

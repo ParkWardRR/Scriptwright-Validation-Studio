@@ -1,33 +1,45 @@
 # roadmap.md — Development roadmap
 
-## Milestones (table)
-| Milestone | Goal | Deliverables | Timebox |
-|---|---|---|---|
-| M0 — Spike | Prove extension + userscript automation feasibility | Load MV3 extension via persistent context; confirm stable way to install/enable a script; produce a demo run w/ artifacts | 1 week |
-| M1 — MVP runner | Deterministic runs + artifacts | Go runner with `lab run`, persistent profile mgmt, script ingestion (paste + file), basic DOM assertions, NDJSON logs | 2–3 weeks |
-| M2 — UI v1 | Usable pro workflow | React/TS app: project → suite → run dashboard; live log console; artifact viewer; basic settings (TM/VM) | 2–3 weeks |
-| M3 — “Testing to the max” | Full checklist categories | Visual regression workflow, network assertion module, HAR record/replay toggle, flow editor (step list) | 3–4 weeks |
-| M4 — Hardening | Reduce flake + better debugging | Trace-first workflow, run retry policy, timeouts defaults, selector diagnostics, redaction, export bundles | 2–3 weeks |
-| M5 — CI & sharing | Team-scale usage | Headless/headed strategy finalized, GitHub Actions template, artifact upload, JSON report format | 2 weeks |
+## Milestones (checklist)
+- [ ] M0 — Spike (goal: extension + userscript automation feasibility)  
+  - [x] Demo run produced with Playwright persistent context and userscript execution (init-script injection) plus artifacts (PNG, WebP, manifest).  
+  - [ ] MV3 extension load + deterministic TM/VM install path.
+- [ ] M1 — MVP runner (deterministic runs + artifacts)  
+  - [ ] `lab run` CLI with persistent profile mgmt.  
+  - [ ] Script ingestion (paste/file) feeding runs.  
+  - [ ] Basic DOM assertions + NDJSON logs.
+- [ ] M2 — UI v1 (usable pro workflow)  
+  - [x] Prototype web UI shell with settings, embedded browser pane, console stream, and artifact preview.  
+  - [ ] Wire UI to runner API for live runs and artifact retrieval.
+- [ ] M3 — “Testing to the max” (full checklist categories)  
+  - [ ] Visual regression + network assertions + HAR record/replay toggle.  
+  - [ ] Flow editor (step list) driving Playwright.
+- [ ] M4 — Hardening (reduce flake + better debugging)  
+  - [ ] Trace-first workflow; retry policy; selector diagnostics; redaction; export bundles.
+- [ ] M5 — CI & sharing (team-scale)  
+  - [ ] Headless/headed strategy; GitHub Actions template; artifact upload; JSON report format.
 
-## Workstreams (what to build in parallel)
-| Workstream | Why | Notes |
-|---|---|---|
-| Extension management | Core technical risk | Must follow Playwright extension constraints (persistent context; bundled Chromium). [page:0] |
-| Script ingestion/versioning | Reproducibility | Support paste/file first; add git URL next |
-| Runner observability | Makes it “pro” | Traces + NDJSON + screenshots early; Trace Viewer integration is key. [web:51][web:52] |
-| UI debug console | Your differentiator | Unified log stream with filtering + correlation |
-| Validation framework | “All of the above” checklist | Design schema once, then add assertion types incrementally |
+## Workstreams (status)
+- [ ] Extension management — must follow Playwright extension constraints (persistent context; bundled Chromium). [page:0]
+- [ ] Script ingestion/versioning — paste/file in progress; git URL later.
+- [ ] Runner observability — traces/NDJSON/screenshots planned; sample manifest + video now exist. [web:51][web:52]
+- [x] UI debug console — prototype shell with console stream + artifact preview added.
+- [ ] Validation framework — design schema + assertion types to come.
 
-## Definition of Done per milestone
-| Milestone | DoD |
-|---|---|
-| M0 | One-click demo: launch context with extension + run on a URL; artifacts saved; documented constraints | 
-| M1 | CLI stable; results JSON; logs and screenshots; deterministic workspace layout |
-| M2 | UI can create suite + run + inspect artifacts without touching filesystem |
-| M3 | Checklist supports DOM+visual+network+flow in one run; baselines stored per suite |
-| M4 | Exportable run bundle; redaction; retry-on-fail; clear error taxonomy |
-| M5 | CI template + docs; sample repo; reproducible pinned versions |
+## Definition of Done (per milestone)
+- M0: One-click demo with extension load + URL run + artifacts saved + constraints documented.
+- M1: CLI stable; results JSON; logs + screenshots; deterministic workspace layout.
+- M2: UI can create suite + run + inspect artifacts without touching filesystem.
+- M3: Checklist supports DOM + visual + network + flow in one run; baselines stored per suite.
+- M4: Exportable run bundle; redaction; retry-on-fail; clear error taxonomy.
+- M5: CI template + docs; sample repo; reproducible pinned versions.
+
+## Done since last update
+- Captured Playwright-Go demo artifacts (PNG, WebP, run manifest) for Wikipedia Dark/Light userscript.
+- Added userscript metadata parser with unit tests.
+- Published README with hero WebP and quickstart.
+- Dropped Blue Oak Model License 1.0.0 into repo.
+- Built a prototype web UI shell (settings + browser pane + console + artifact preview).
 
 ## Known risks / decision points
 | Risk | Impact | Mitigation |
