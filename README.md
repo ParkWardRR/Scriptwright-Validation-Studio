@@ -9,6 +9,9 @@
 <p align="center">
   <img src="artifacts/webui.png" alt="UI overview: settings, embedded browser, console, flow editor, HAR/trace links" width="100%">
 </p>
+<p align="center">
+  <em>Need extensions? Grab TM MV3 and VM quickly (links below) then upload via the Extensions panel.</em>
+</p>
 
 ## Why this exists
 A desktop-first lab for validating real userscripts with real engines (Tampermonkey/Violentmonkey) using Playwright-Go. It mirrors the spec/roadmap in `spec.md` and `roadmap.md`: persistent Chromium context, bundled extensions, rich artifacts (logs, HAR, traces, screenshots, video), and a pro debugging console.
@@ -47,6 +50,7 @@ A desktop-first lab for validating real userscripts with real engines (Tampermon
 - Script ingestion: file path, paste/stdin, URL (`--script_url`) or git repo/path (`--script_git_repo`, `--script_git_path`).
 - Visual diff: `--baseline <dir>` seeds/compares and emits `visual-diff.png`; adjust threshold via `--visual_threshold` (0–255). Manifests include pixel counts/ratio.
 - Notarized CLI: `dist/lab-macos.zip` (built & notarized locally via notarytool with Developer ID + hardened runtime).
+- Extensions: UI upload supports CRX/XPI; or download manually (TM MV3 CRX link; VM from https://violentmonkey.github.io/get-it/) and unzip to `extensions/`, then run with `--ext extensions/tampermonkey-mv3` or load VM in Firefox profile.
 
 ## Web UI prototype (manual + future automated)
 <p align="center">

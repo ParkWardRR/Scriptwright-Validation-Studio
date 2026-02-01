@@ -14,7 +14,7 @@
 - [ ] M3 — “Testing to the max” (full checklist categories)  
   - [~] Visual regression + network assertions + HAR record/replay toggles (hash-based baseline, diff image, blocked-host/status checks, HAR capture & replay). Need pixel-threshold tuning UI + diff preview surface.  
   - [~] Flow editor (step list) driving Playwright (UI sends steps; runner executes click/fill/wait/assert-text/contains/exists/attr).  
-  - [ ] MV3 bundles (TM) + VM/Firefox packaged under `extensions/` with scripted install/enable + extensionId confirmation.
+  - [~] MV3/VM loading: upload flow + stub TM install; needs deterministic UI automation + CI 3x validation before closing.
 - [ ] M4 — Hardening (reduce flake + better debugging)  
   - [ ] Trace-first workflow; retry policy; selector diagnostics; redaction; export bundles.
 - [ ] M5 — CI & sharing (team-scale)  
