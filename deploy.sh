@@ -17,7 +17,7 @@ echo "==> Creating remote directory..."
 ssh -i "${SSH_KEY}" "${SSH_TARGET}" "mkdir -p ${REMOTE_DIR}"
 
 echo "==> Copying source code to remote server ${SSH_TARGET}..."
-rsync -avz --exclude 'runs' --exclude '.git' --exclude 'dist' --exclude '.DS_Store' \
+rsync -avz --exclude 'runs' --exclude '.git' --exclude 'node_modules' --exclude '.DS_Store' \
   -e "ssh -i ${SSH_KEY}" \
   ./ "${SSH_TARGET}:${REMOTE_DIR}/"
 
